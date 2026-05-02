@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.auth import require_admin
 from app.database import get_db
 from app.models import Assignment, Review, SheetRow, SHEET_KEYS, User, Role
+from app.sync import do_full_export
 
 FACULTY_NAMES = {'НАБ', 'ФЭБ', 'ВШУ', 'ИТиАБД', 'СНиМК', 'МЭО', 'Финфак', 'Юрфак'}
 FIO_KEYWORDS = ["фио", "имя", "фамилия", "ф.и.о"]
@@ -227,18 +228,32 @@ def distribution_overview(
         for c in coords
     ]
 
-    totals_assigned = {
-        k: sum(c["assigned"][k] for c in coordinators) for k in SHEET_KEYS
-    }
-    totals_reviewed = {
-        k: sum(c["reviewed"][k] for c in coordinators) for k in SHEET_KEYS
-    }
+    # Totals считаем по ВСЕМ записям (включая проверки админа), а не суммой
+    # по координаторам — иначе review админа теряется и счётчик стоит на нуле.
+    totals_assigned = {k: 0 for k in SHEET_KEYS}
+    totals_reviewed = {k: 0 for k in SHEET_KEYS}
+    for _rid, sheet, cnt in asgn_rows:
+        if sheet in SHEET_KEYS:
+            totals_assigned[sheet] += cnt
+    for _rid, sheet, cnt in rev_rows:
+        if sheet in SHEET_KEYS:
+            totals_reviewed[sheet] += cnt
 
     return {
         "coordinators": coordinators,
         "totals_assigned": totals_assigned,
         "totals_reviewed": totals_reviewed,
     }
+
+
+@router.post("/sync-now")
+def sync_now(_: User = Depends(require_admin)):
+    """Полная выгрузка ВСЕХ Review из БД в Google Sheets + чистка стилых 'None'.
+
+    Используется кнопкой "Выгрузить всё в Google Sheets" в админке.
+    Игнорирует флаг synced_to_sheets — пишет всё, даже уже выгруженное.
+    """
+    return do_full_export()
 
 
 @router.get("/distribution/{sheet}")

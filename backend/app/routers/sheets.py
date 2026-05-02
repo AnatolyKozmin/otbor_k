@@ -1,6 +1,7 @@
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_admin
@@ -59,12 +60,11 @@ def get_sheet(
             db.query(Assignment).filter(Assignment.sheet == sheet).limit(1).count() > 0
         )
         if has_assignments:
-            assigned_rows = (
-                db.query(Assignment.row_number)
-                .filter(Assignment.sheet == sheet, Assignment.reviewer_id == user.id)
-                .subquery()
+            assigned_rows_select = (
+                select(Assignment.row_number)
+                .where(Assignment.sheet == sheet, Assignment.reviewer_id == user.id)
             )
-            query = query.filter(SheetRow.row_number.in_(assigned_rows))
+            query = query.filter(SheetRow.row_number.in_(assigned_rows_select))
 
     rows = query.order_by(SheetRow.row_number).all()
 

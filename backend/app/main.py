@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.auth import hash_password
 from app.database import engine, Base
-from app.models import User, Role, Review
+from app.models import User, Role
 from app.routers import auth, users, sheets, reviews, admin_ops
+from app.sync import do_sync
 
 
 SEED_USERS = [
@@ -49,72 +50,11 @@ SEED_USERS = [
 # Background sync: SQLite reviews → Google Sheets (every 3 min)
 # ---------------------------------------------------------------------------
 
-def _do_sync():
-    """Sync SQLite reviews → Google Sheets с оптимистичной блокировкой по saved_at.
-
-    Ключевая инвариантa: помечаем synced=True ТОЛЬКО для тех записей, у которых
-    saved_at не изменился между чтением и записью в sheets. Если координатор
-    успел сохранить заново во время отправки, его новые данные останутся
-    synced=False и попадут в следующий цикл.
-    """
-    from app.sheets import GoogleSheetsEngine
-    from collections import defaultdict
-
-    db = Session(engine)
-    try:
-        # Снимок: id + содержимое + saved_at на момент чтения
-        unsynced = (
-            db.query(Review.id, Review.sheet, Review.row_number, Review.scores, Review.saved_at)
-            .filter(Review.synced_to_sheets.is_(False))
-            .all()
-        )
-        if not unsynced:
-            return
-
-        try:
-            gs = GoogleSheetsEngine()
-        except Exception as exc:
-            print(f"[sync] Google Sheets недоступен: {exc}")
-            return
-
-        by_sheet = defaultdict(list)
-        for r in unsynced:
-            # (row_number, scores, id, snapshot_saved_at)
-            by_sheet[r.sheet].append((r.row_number, r.scores, r.id, r.saved_at))
-
-        for sheet_key, items in by_sheet.items():
-            try:
-                updates = [(row_num, scores) for row_num, scores, _, _ in items]
-                gs.batch_update_reviews(sheet_key, updates)
-
-                # Per-row UPDATE с проверкой saved_at — если запись изменилась после
-                # снимка, condition не сработает и synced останется False.
-                marked = 0
-                for _, _, review_id, snapshot in items:
-                    rows_updated = (
-                        db.query(Review)
-                        .filter(Review.id == review_id, Review.saved_at == snapshot)
-                        .update({"synced_to_sheets": True}, synchronize_session=False)
-                    )
-                    marked += rows_updated
-                db.commit()
-                skipped = len(items) - marked
-                msg = f"[sync] {sheet_key}: записано {len(items)}, помечено synced {marked}"
-                if skipped:
-                    msg += f" (пропущено {skipped} — изменены после снимка, попадут в след. цикл)"
-                print(msg)
-            except Exception as exc:
-                print(f"[sync] Ошибка для листа {sheet_key}: {exc}")
-                db.rollback()
-    finally:
-        db.close()
-
-
 def _sync_loop():
     while True:
         time.sleep(180)  # 3 минуты
         try:
-            _do_sync()
+            do_sync()
         except Exception as exc:
             print(f"[sync] Неожиданная ошибка: {exc}")
 

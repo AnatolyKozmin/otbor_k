@@ -95,6 +95,60 @@
 
       </div>
     </div>
+
+    <!-- Кнопка-флажок и выезжающая панель подсказки -->
+    <Teleport to="body">
+      <button
+        class="rubric-toggle"
+        :class="{ open: rubricOpen }"
+        :title="rubricOpen ? 'Скрыть подсказку (Esc)' : 'Показать подсказку по баллам'"
+        @click="rubricOpen = !rubricOpen"
+      >
+        <span class="rubric-toggle-icon">📋</span>
+        <span class="rubric-toggle-text">Подсказка</span>
+      </button>
+
+      <transition name="rubric-fade">
+        <div
+          v-if="rubricOpen"
+          class="rubric-backdrop"
+          @click="rubricOpen = false"
+        />
+      </transition>
+
+      <transition name="rubric-slide">
+        <aside v-if="rubricOpen" class="rubric-panel" role="dialog" aria-label="Подсказка по баллам">
+          <header class="rubric-head">
+            <div>
+              <h3>Подсказка по баллам</h3>
+              <p>Что и за сколько баллов ставить</p>
+            </div>
+            <button class="rubric-close" @click="rubricOpen = false" aria-label="Закрыть">×</button>
+          </header>
+
+          <div class="rubric-body">
+            <section
+              v-for="r in RUBRIC"
+              :key="r.key"
+              class="rubric-item"
+            >
+              <h4 class="rubric-item-title">{{ r.label }}</h4>
+
+              <div class="rubric-levels">
+                <div
+                  v-for="lvl in r.levels"
+                  :key="lvl.score"
+                  class="rubric-level"
+                >
+                  <span class="rubric-score" :data-score="lvl.score">{{ lvl.score }}</span>
+                  <div class="rubric-text">{{ lvl.text }}</div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </aside>
+      </transition>
+    </Teleport>
   </AppLayout>
 </template>
 
@@ -104,6 +158,7 @@ import { useRoute } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
 import api from '../api'
 import { useAuthStore } from '../stores/auth'
+import { RUBRIC } from '../data/rubric'
 
 const SHEET_LABELS = { anketa: 'Анкета', homework: 'Домашка', interview: 'Собес' }
 
@@ -126,6 +181,9 @@ const saving = ref(false)
 const saveOk = ref(false)
 const saveError = ref('')
 const autosaveMsg = ref('')
+
+// Подсказка по баллам
+const rubricOpen = ref(false)
 
 // localStorage — ВСЕГДА используется как защищённый бэкап (не только когда Redis offline).
 // Включаем user.id, чтобы драфты не утекали между разными аккаунтами в одном браузере.
@@ -216,6 +274,7 @@ onMounted(async () => {
   window.addEventListener('beforeunload', flushOnUnload)
   window.addEventListener('pagehide', flushOnUnload)
   document.addEventListener('visibilitychange', onVisibilityChange)
+  document.addEventListener('keydown', onKeydown)
 })
 
 onUnmounted(() => {
@@ -224,7 +283,12 @@ onUnmounted(() => {
   window.removeEventListener('beforeunload', flushOnUnload)
   window.removeEventListener('pagehide', flushOnUnload)
   document.removeEventListener('visibilitychange', onVisibilityChange)
+  document.removeEventListener('keydown', onKeydown)
 })
+
+function onKeydown(e) {
+  if (e.key === 'Escape' && rubricOpen.value) rubricOpen.value = false
+}
 
 function onVisibilityChange() {
   if (document.visibilityState === 'hidden') flushOnUnload()
@@ -526,4 +590,170 @@ async function saveReview() {
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 .state-msg.error { color: #e63946; }
+</style>
+
+<!-- Глобальные стили для панели подсказки. Без scoped — потому что
+     Teleport уносит элементы в body, а scoped-селекторы на data-v-XXX
+     там не работают. Префикс .rubric-* уникален и не конфликтует. -->
+<style>
+/* Кнопка-флажок на левой кромке контента (после сайдбара 240px) */
+.rubric-toggle {
+  position: fixed;
+  top: 50%;
+  left: 240px;
+  transform: translateY(-50%);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.7rem 0.55rem;
+  background: #4361ee;
+  color: white;
+  border: none;
+  border-radius: 0 12px 12px 0;
+  cursor: pointer;
+  box-shadow: 2px 2px 12px rgba(67,97,238,0.25);
+  font-size: 0.78rem;
+  font-weight: 600;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transition: left 0.28s cubic-bezier(0.22, 0.61, 0.36, 1), background 0.15s;
+}
+.rubric-toggle:hover { background: #3451d1; }
+.rubric-toggle.open {
+  left: calc(240px + 480px);
+  background: #1a1a2e;
+}
+.rubric-toggle-icon { font-size: 1rem; writing-mode: horizontal-tb; }
+.rubric-toggle-text { letter-spacing: 0.05em; }
+
+/* Затемнение под панелью */
+.rubric-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(26,26,46,0.35);
+  z-index: 1050;
+}
+
+/* Сама выезжающая панель */
+.rubric-panel {
+  position: fixed;
+  top: 0;
+  left: 240px;
+  bottom: 0;
+  width: 480px;
+  max-width: calc(100vw - 240px);
+  background: white;
+  box-shadow: 4px 0 24px rgba(0,0,0,0.15);
+  z-index: 1080;
+  display: flex;
+  flex-direction: column;
+}
+
+.rubric-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.4rem;
+  border-bottom: 1px solid #eef0f4;
+  background: linear-gradient(180deg, #f8f9fc 0%, white 100%);
+}
+.rubric-head h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1.05rem;
+  color: #1a1a2e;
+}
+.rubric-head p {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #888;
+}
+.rubric-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #f0f2f5;
+  color: #555;
+  font-size: 1.4rem;
+  line-height: 1;
+  border-radius: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.rubric-close:hover { background: #e63946; color: white; }
+
+.rubric-body {
+  overflow-y: auto;
+  padding: 1rem 1.4rem 2rem;
+  flex: 1;
+}
+
+.rubric-item {
+  padding: 1rem 0 1.25rem;
+  border-bottom: 1px solid #f0f2f5;
+}
+.rubric-item:last-child { border-bottom: none; }
+
+.rubric-item-title {
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+.rubric-levels {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.rubric-level {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 0.7rem;
+  align-items: start;
+}
+.rubric-score {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+.rubric-score[data-score="0"] { background: #fdecea; color: #c0392b; }
+.rubric-score[data-score="1"] { background: #fff5e0; color: #d68910; }
+.rubric-score[data-score="2"] { background: #e8f4fd; color: #2874a6; }
+.rubric-score[data-score="3"] { background: #e7f8ef; color: #1e8449; }
+
+.rubric-text {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #333;
+  white-space: pre-wrap;
+}
+
+/* Анимации */
+.rubric-fade-enter-active,
+.rubric-fade-leave-active { transition: opacity 0.22s ease; }
+.rubric-fade-enter-from,
+.rubric-fade-leave-to { opacity: 0; }
+
+.rubric-slide-enter-active,
+.rubric-slide-leave-active {
+  transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.rubric-slide-enter-from,
+.rubric-slide-leave-to { transform: translateX(-100%); }
+
+/* Адаптив: на узких экранах сайдбар может схлопываться — убираем 240px-смещение */
+@media (max-width: 900px) {
+  .rubric-toggle { left: 0; }
+  .rubric-toggle.open { left: min(480px, 90vw); }
+  .rubric-panel { left: 0; max-width: 90vw; }
+}
 </style>

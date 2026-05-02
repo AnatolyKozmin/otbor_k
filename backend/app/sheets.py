@@ -41,8 +41,15 @@ REVIEW_FIELDS = [
     "questions",
     "comments",
 ]
+# Колонка A (1) — имя проверяющего; сумму баллов считают формулой в Sheets
+REVIEWER_COL = 1  # A
 
 SheetData = Tuple[List[str], List[Dict]]  # (headers, rows)
+
+
+def _fmt_cell(v) -> str:
+    """None → "" (иначе в Sheets улетает строка "None"). 0 сохраняется как "0"."""
+    return "" if v is None else str(v)
 
 
 class GoogleSheetsEngine:
@@ -138,25 +145,34 @@ class GoogleSheetsEngine:
     ) -> None:
         """Записывает оценки в Google Sheets (колонки AN→AV для данной строки)."""
         ws = self._spreadsheet.worksheet(SHEET_LABELS[sheet_key])
-        values = [[str(scores.get(f, "")) for f in REVIEW_FIELDS]]
+        values = [[_fmt_cell(scores.get(f)) for f in REVIEW_FIELDS]]
         start_a1 = gspread.utils.rowcol_to_a1(row_number, REVIEW_COL_START)
         ws.update(values, start_a1)
 
     def batch_update_reviews(
-        self, sheet_key: str, updates: List[Tuple[int, Dict]]
+        self, sheet_key: str, updates: List[Tuple[int, Dict, str]]
     ) -> None:
-        """Пакетная запись оценок: updates = [(row_number, scores), ...]."""
+        """Пакетная запись оценок и имени проверяющего.
+
+        updates = [(row_number, scores, reviewer_name), ...]
+        Баллы → AN:AX, имя проверяющего → AY.
+        """
         if not updates:
             return
         ws = self._spreadsheet.worksheet(SHEET_LABELS[sheet_key])
         batch = []
-        for row_number, scores in updates:
+        for row_number, scores, reviewer_name in updates:
             start_a1 = gspread.utils.rowcol_to_a1(row_number, REVIEW_COL_START)
             end_a1 = gspread.utils.rowcol_to_a1(
                 row_number, REVIEW_COL_START + len(REVIEW_FIELDS) - 1
             )
             batch.append({
                 "range": f"{start_a1}:{end_a1}",
-                "values": [[str(scores.get(f, "")) for f in REVIEW_FIELDS]],
+                "values": [[_fmt_cell(scores.get(f)) for f in REVIEW_FIELDS]],
+            })
+            reviewer_a1 = gspread.utils.rowcol_to_a1(row_number, REVIEWER_COL)
+            batch.append({
+                "range": reviewer_a1,
+                "values": [[reviewer_name or ""]],
             })
         ws.batch_update(batch)

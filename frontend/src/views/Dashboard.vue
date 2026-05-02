@@ -27,8 +27,20 @@
     <div v-if="auth.isAdmin" class="card">
       <div class="dist-header">
         <h3>Распределение проверки</h3>
-        <router-link to="/admin/assignments" class="dist-link">Подробнее →</router-link>
+        <div class="dist-header-actions">
+          <button
+            class="sync-btn"
+            :disabled="syncing"
+            :title="'Перезаписать ВСЕ оценки в Google Sheets из базы и подчистить пустые ячейки'"
+            @click="syncNow"
+          >
+            {{ syncing ? 'Выгрузка…' : '⟳ Выгрузить всё в Sheets' }}
+          </button>
+          <router-link to="/admin/assignments" class="dist-link">Подробнее →</router-link>
+        </div>
       </div>
+
+      <div v-if="syncMsg" class="sync-msg" :class="syncMsgKind">{{ syncMsg }}</div>
 
       <div v-if="overviewLoading" class="muted-msg">Загрузка…</div>
       <div v-else-if="overviewError" class="muted-msg err">{{ overviewError }}</div>
@@ -136,8 +148,12 @@ const overview = ref(null)
 const overviewLoading = ref(false)
 const overviewError = ref('')
 
-onMounted(async () => {
-  if (!auth.isAdmin) return
+// Sync now
+const syncing = ref(false)
+const syncMsg = ref('')
+const syncMsgKind = ref('ok')  // 'ok' | 'warn' | 'err'
+
+async function loadOverview() {
   overviewLoading.value = true
   try {
     const { data } = await api.get('/admin/distribution-overview')
@@ -147,7 +163,49 @@ onMounted(async () => {
   } finally {
     overviewLoading.value = false
   }
+}
+
+onMounted(async () => {
+  if (!auth.isAdmin) return
+  await loadOverview()
 })
+
+async function syncNow() {
+  syncing.value = true
+  syncMsg.value = ''
+  try {
+    const { data } = await api.post('/admin/sync-now')
+    const labelMap = { anketa: 'Анкета', homework: 'Домашка', interview: 'Собес' }
+
+    if (!data.sheets_available) {
+      syncMsgKind.value = 'err'
+      syncMsg.value = 'Google Sheets недоступен: ' + (data.errors?.[0]?.message || 'неизвестная ошибка')
+    } else if (data.total_reviews === 0) {
+      syncMsgKind.value = 'ok'
+      syncMsg.value = 'В базе нет ни одной финальной оценки — выгружать нечего.'
+    } else {
+      const exported = Object.entries(data.exported || {})
+        .filter(([, n]) => n > 0)
+        .map(([k, n]) => `${labelMap[k] || k}: ${n}`)
+      const cleaned = Object.values(data.none_cleaned || {}).reduce((a, b) => a + b, 0)
+      const errs = data.errors?.length || 0
+      syncMsgKind.value = errs ? 'warn' : 'ok'
+
+      let msg = exported.length
+        ? `Выгружено в Sheets — ${exported.join(', ')}.`
+        : 'Ничего не выгружено.'
+      if (cleaned) msg += ` Подчищено пустых ячеек ('None'): ${cleaned}.`
+      if (errs) msg += ` Ошибок: ${errs} (${data.errors[0].message}).`
+      syncMsg.value = msg
+    }
+    await loadOverview()
+  } catch (e) {
+    syncMsgKind.value = 'err'
+    syncMsg.value = e.response?.data?.detail || 'Ошибка выгрузки'
+  } finally {
+    syncing.value = false
+  }
+}
 
 const currentFaculties = ref([...(auth.user.faculties || [])])
 const draftFaculties = ref([])
@@ -242,6 +300,33 @@ h2 { margin: 0 0 1.5rem; color: #1a1a2e; font-size: 1.4rem; }
   font-weight: 600;
 }
 .dist-link:hover { text-decoration: underline; }
+
+.dist-header-actions { display: flex; align-items: center; gap: 1rem; }
+
+.sync-btn {
+  padding: 0.45rem 0.9rem;
+  border: 1.5px solid #4361ee;
+  background: white;
+  color: #4361ee;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.sync-btn:hover:not(:disabled) { background: #4361ee; color: white; }
+.sync-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.sync-msg {
+  margin-bottom: 0.85rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+.sync-msg.ok   { background: rgba(6,214,160,0.1);  color: #06875e; }
+.sync-msg.warn { background: rgba(255,190,11,0.15); color: #c98a00; }
+.sync-msg.err  { background: rgba(230,57,70,0.1);   color: #b02935; }
 
 .muted-msg { color: #aaa; font-size: 0.875rem; padding: 1rem 0; }
 .muted-msg.err { color: #e63946; }
