@@ -1,0 +1,62 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: koord-hr-redis
+    restart: unless-stopped
+    # save 60 1 — снапшот на диск, если ≥1 ключ менялся за 60 сек
+    # appendonly yes — AOF-журнал на каждую запись (защита от потери черновиков)
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "yes", "--loglevel", "warning"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - koord-hr
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    container_name: koord-hr-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      # SQLite-файл в volume — переживает пересборки/рестарты
+      DATABASE_URL: sqlite:////data/koord_hr.db
+      GOOGLE_CREDENTIALS_PATH: /app/credentials.json
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    volumes:
+      # credentials.json — секрет, read-only bind mount, не лежит в образе
+      - ./backend/credentials.json:/app/credentials.json:ro
+      - sqlite_data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - koord-hr
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: koord-hr-frontend
+    restart: unless-stopped
+    ports:
+      - "8090:80"   # ← поменяй здесь, если 8090 тоже окажется занят
+    depends_on:
+      - backend
+    networks:
+      - koord-hr
+
+networks:
+  koord-hr:
+    driver: bridge
+
+volumes:
+  redis_data:
+    name: koord_hr_redis_data
+  sqlite_data:
+    name: koord_hr_sqlite_data
