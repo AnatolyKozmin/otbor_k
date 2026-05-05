@@ -91,10 +91,53 @@
           <div class="redis-hint" v-if="!redisAvailable">
             Redis недоступен — автосохранение в браузере
           </div>
+
+          <button class="btn-share" @click="openShare">
+            Поделиться смешным ответом
+          </button>
         </div>
 
       </div>
     </div>
+
+    <!-- Share modal -->
+    <Teleport to="body">
+      <div v-if="shareOpen" class="share-backdrop" @click.self="shareOpen = false"></div>
+      <div v-if="shareOpen" class="share-modal">
+        <div class="share-head">
+          <h3>Поделиться ответом</h3>
+          <button class="close-btn" @click="shareOpen = false">✕</button>
+        </div>
+        <p class="share-hint">
+          Выбери вопрос — карточка с ответом отправится в Telegram-чат факультета.
+        </p>
+        <div class="share-list">
+          <label
+            v-for="qa in shareableQA"
+            :key="qa.key"
+            class="share-item"
+            :class="{ selected: selectedQA === qa.key }"
+          >
+            <input type="radio" :value="qa.key" v-model="selectedQA" />
+            <div class="qa-content">
+              <div class="qa-q">{{ qa.label }}</div>
+              <div class="qa-a">{{ qa.answer }}</div>
+            </div>
+          </label>
+        </div>
+        <div v-if="shareMsg" class="share-msg" :class="shareMsgKind">{{ shareMsg }}</div>
+        <div class="share-actions">
+          <button class="btn-cancel" @click="shareOpen = false">Отмена</button>
+          <button
+            class="btn-send"
+            :disabled="!selectedQA || sharing"
+            @click="doShare"
+          >
+            {{ sharing ? 'Отправка…' : 'Отправить в Telegram' }}
+          </button>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- Кнопка-флажок и выезжающая панель подсказки -->
     <Teleport to="body">
@@ -153,7 +196,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import AppLayout from '../components/AppLayout.vue'
 import api from '../api'
@@ -184,6 +227,48 @@ const autosaveMsg = ref('')
 
 // Подсказка по баллам
 const rubricOpen = ref(false)
+
+// Share modal
+const shareOpen = ref(false)
+const selectedQA = ref(null)
+const sharing = ref(false)
+const shareMsg = ref('')
+const shareMsgKind = ref('ok')
+
+const shareableQA = computed(() => {
+  return Object.entries(displayData.value)
+    .filter(([, v]) => v && String(v).trim().length > 5)
+    .map(([label, answer]) => ({ key: label, label, answer: String(answer) }))
+})
+
+function openShare() {
+  selectedQA.value = null
+  shareMsg.value = ''
+  shareOpen.value = true
+}
+
+async function doShare() {
+  if (!selectedQA.value) return
+  sharing.value = true
+  shareMsg.value = ''
+  const qa = shareableQA.value.find(q => q.key === selectedQA.value)
+  try {
+    const { data } = await api.post('/telegram/share', {
+      sheet,
+      row_number: rowNumber,
+      question_label: qa.label,
+      answer: qa.answer,
+    })
+    shareMsgKind.value = 'ok'
+    shareMsg.value = `Отправлено в чат «${data.chat}»`
+    setTimeout(() => { shareOpen.value = false }, 2000)
+  } catch (e) {
+    shareMsgKind.value = 'err'
+    shareMsg.value = e.response?.data?.detail || 'Ошибка отправки'
+  } finally {
+    sharing.value = false
+  }
+}
 
 // localStorage — ВСЕГДА используется как защищённый бэкап (не только когда Redis offline).
 // Включаем user.id, чтобы драфты не утекали между разными аккаунтами в одном браузере.
@@ -581,6 +666,21 @@ async function saveReview() {
   margin-top: -0.4rem;
 }
 
+.btn-share {
+  width: 100%;
+  padding: 0.55rem;
+  background: transparent;
+  border: 1.5px dashed #9b85d8;
+  color: #7c5cd8;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-top: 0.35rem;
+}
+.btn-share:hover { background: rgba(124,92,216,0.08); border-style: solid; }
+
 .state-msg {
   background: white;
   border-radius: 12px;
@@ -756,4 +856,118 @@ async function saveReview() {
   .rubric-toggle.open { left: min(480px, 90vw); }
   .rubric-panel { left: 0; max-width: 90vw; }
 }
+
+/* ─── Share modal ─────────────────────────────────────────────────────────── */
+.share-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 300;
+}
+
+.share-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 301;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 8px 48px rgba(0,0,0,0.18);
+  width: 540px;
+  max-width: calc(100vw - 2rem);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.share-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.4rem 0.85rem;
+  border-bottom: 1px solid #eee;
+  flex-shrink: 0;
+}
+.share-head h3 { margin: 0; font-size: 1rem; color: #1a1a2e; }
+
+.share-hint {
+  margin: 0;
+  padding: 0.75rem 1.4rem;
+  font-size: 0.82rem;
+  color: #888;
+  line-height: 1.45;
+  flex-shrink: 0;
+}
+
+.share-list {
+  overflow-y: auto;
+  padding: 0 1.4rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-bottom: 0.75rem;
+}
+
+.share-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem;
+  border: 1.5px solid #e8e8e8;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.12s;
+  user-select: none;
+}
+.share-item:hover { border-color: #9b85d8; background: rgba(124,92,216,0.04); }
+.share-item.selected { border-color: #7c5cd8; background: rgba(124,92,216,0.07); }
+.share-item input { margin-top: 0.2rem; flex-shrink: 0; accent-color: #7c5cd8; }
+
+.qa-content { min-width: 0; }
+.qa-q { font-size: 0.75rem; font-weight: 600; color: #888; margin-bottom: 0.2rem; }
+.qa-a {
+  font-size: 0.875rem;
+  color: #222;
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.share-msg {
+  margin: 0 1.4rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  flex-shrink: 0;
+}
+.share-msg.ok  { background: rgba(6,214,160,0.1);  color: #06875e; }
+.share-msg.err { background: rgba(230,57,70,0.08); color: #e63946; }
+
+.share-actions {
+  display: flex;
+  gap: 0.65rem;
+  justify-content: flex-end;
+  padding: 0.85rem 1.4rem 1.1rem;
+  border-top: 1px solid #eee;
+  flex-shrink: 0;
+}
+
+.btn-send {
+  padding: 0.55rem 1.4rem;
+  background: #7c5cd8;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-send:hover:not(:disabled) { background: #6a4bc5; }
+.btn-send:disabled { opacity: 0.55; cursor: not-allowed; }
 </style>

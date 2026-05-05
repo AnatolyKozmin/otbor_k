@@ -88,6 +88,16 @@ class SlotCapacity(Base):
     )
 
 
+class TelegramChat(Base):
+    """Telegram-чат, в который отправляются карточки «Легендарные кандидаты»."""
+    __tablename__ = "telegram_chats"
+
+    id = Column(Integer, primary_key=True)
+    chat_id = Column(String, unique=True, nullable=False)   # "-1001234567890"
+    title = Column(String, nullable=False)
+    faculties = Column(JSON, nullable=False, default=list)  # ["НАБ", "ФЭБ", ...]
+
+
 class Review(Base):
     __tablename__ = "reviews"
 

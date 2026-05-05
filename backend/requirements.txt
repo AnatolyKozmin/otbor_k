@@ -10,3 +10,5 @@ pydantic[email]==2.10.0
 gspread==6.1.2
 google-auth==2.36.0
 redis==5.0.8
+aiogram==3.15.0
+pillow==11.0.0

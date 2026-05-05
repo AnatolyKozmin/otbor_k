@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     GOOGLE_CREDENTIALS_PATH: str = "credentials.json"
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
+    TELEGRAM_BOT_TOKEN: str = ""
 
     model_config = {"env_file": ".env"}
 

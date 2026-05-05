@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.auth import hash_password
 from app.database import engine, Base
-from app.models import User, Role
-from app.routers import auth, users, sheets, reviews, admin_ops, availability
+from app.models import User, Role, TelegramChat  # noqa: F401 — ensures table is registered
+from app.routers import auth, users, sheets, reviews, admin_ops, availability, telegram
 from app.sync import do_sync
 
 
@@ -112,6 +112,7 @@ app.include_router(sheets.router)
 app.include_router(reviews.router)
 app.include_router(admin_ops.router)
 app.include_router(availability.router)
+app.include_router(telegram.router)
 
 
 @app.get("/health")
