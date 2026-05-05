@@ -74,6 +74,20 @@ class Availability(Base):
     )
 
 
+class SlotCapacity(Base):
+    """Ёмкость часового слота собеседований, задаётся администратором."""
+    __tablename__ = "slot_capacities"
+
+    id = Column(Integer, primary_key=True)
+    slot_date = Column(String, nullable=False)   # YYYY-MM-DD
+    slot_hour = Column(Integer, nullable=False)  # 9..21
+    capacity = Column(Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        UniqueConstraint("slot_date", "slot_hour", name="uq_slot_capacity"),
+    )
+
+
 class Review(Base):
     __tablename__ = "reviews"
 

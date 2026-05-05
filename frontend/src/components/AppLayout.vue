@@ -8,6 +8,7 @@
         <router-link to="/availability">Занятость</router-link>
         <router-link v-if="auth.isAdmin" to="/admin">Управление</router-link>
         <router-link v-if="auth.isAdmin" to="/admin/assignments">Распределение</router-link>
+        <router-link v-if="auth.isAdmin" to="/admin/availability">Занятость (адм.)</router-link>
       </nav>
       <div class="user-footer">
         <span class="role-badge" :class="auth.user.role">
