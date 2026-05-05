@@ -177,7 +177,10 @@ def do_full_export() -> Dict:
         start_letter = gspread.utils.rowcol_to_a1(1, REVIEW_COL_START).rstrip("0123456789")
         end_letter = gspread.utils.rowcol_to_a1(1, end_col).rstrip("0123456789")
 
-        for sheet_key, sheet_name in SHEET_LABELS.items():
+        # Пока трогаем только анкету. Домашка и собес ещё не используются
+        # для оценивания — у них даже нет колонок AN:AX.
+        for sheet_key in ("anketa",):
+            sheet_name = SHEET_LABELS[sheet_key]
             try:
                 ws = gs._spreadsheet.worksheet(sheet_name)
             except gspread.WorksheetNotFound:

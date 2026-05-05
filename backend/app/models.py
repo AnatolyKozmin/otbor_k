@@ -55,6 +55,25 @@ class Assignment(Base):
     )
 
 
+class Availability(Base):
+    """Занятость пользователя по часовым слотам (когда МОЖЕТ приходить).
+
+    Хранит только слоты со значением «могу» — отсутствие записи = «не могу».
+    Это компактнее и проще для перезаписи: при сохранении из UI просто
+    удаляем все строки пользователя и вставляем актуальный набор.
+    """
+    __tablename__ = "availability"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    slot_date = Column(String, nullable=False)   # YYYY-MM-DD
+    slot_hour = Column(Integer, nullable=False)  # 9..21 (час начала)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "slot_date", "slot_hour", name="uq_availability_slot"),
+    )
+
+
 class Review(Base):
     __tablename__ = "reviews"
 

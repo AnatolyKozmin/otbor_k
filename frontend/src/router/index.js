@@ -23,6 +23,11 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/availability',
+    component: () => import('../views/Availability.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/admin',
     component: () => import('../views/Admin.vue'),
     meta: { requiresAuth: true, requiresAdmin: true },
