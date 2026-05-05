@@ -1,3 +1,4 @@
+import asyncio
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -8,6 +9,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from app.auth import hash_password
+from app.config import settings
 from app.database import engine, Base
 from app.models import User, Role, TelegramChat  # noqa: F401 — ensures table is registered
 from app.routers import auth, users, sheets, reviews, admin_ops, availability, telegram
@@ -69,7 +71,17 @@ async def lifespan(app: FastAPI):
     _migrate_db()
     _seed_users()
     threading.Thread(target=_sync_loop, daemon=True, name="sheets-sync").start()
+    bot_task = None
+    if settings.TELEGRAM_BOT_TOKEN:
+        from app.routers.telegram import start_bot_polling
+        bot_task = asyncio.create_task(start_bot_polling())
     yield
+    if bot_task:
+        bot_task.cancel()
+        try:
+            await bot_task
+        except asyncio.CancelledError:
+            pass
 
 
 def _migrate_db():

@@ -8,12 +8,15 @@
           <div>
             <h3>Telegram-чаты</h3>
             <p class="hint">
-              Добавь чаты, в которые будут отправляться карточки «Легендарные кандидаты».
-              Узнать chat_id можно, написав боту <b>@userinfobot</b> из нужного чата,
-              или через Telegram API.
+              Добавь бота в нужные группы — чаты появятся здесь автоматически.
+              Или напиши <b>/chatid</b> в группе, чтобы бот ответил своим ID.
+              Потом назначь каждому чату факультеты через «Изменить».
             </p>
           </div>
-          <button class="btn-add" @click="openAdd">+ Добавить чат</button>
+          <div class="head-btns">
+            <button class="btn-refresh" @click="load" :disabled="loading" title="Обновить список">⟳</button>
+            <button class="btn-add" @click="openAdd">+ Добавить чат</button>
+          </div>
         </div>
 
         <div v-if="loading" class="state-msg">Загрузка…</div>
@@ -165,6 +168,21 @@ h2 { margin: 0; color: #1a1a2e; font-size: 1.4rem; }
 
 .card-header h3 { margin: 0 0 0.35rem; color: #1a1a2e; font-size: 1rem; }
 .hint { margin: 0; color: #888; font-size: 0.82rem; max-width: 580px; line-height: 1.45; }
+
+.head-btns { display: flex; gap: 0.5rem; flex-shrink: 0; }
+
+.btn-refresh {
+  padding: 0.5rem 0.75rem;
+  background: white;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 1rem;
+  color: #666;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-refresh:hover:not(:disabled) { border-color: #4361ee; color: #4361ee; }
+.btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-add {
   padding: 0.5rem 1.1rem;

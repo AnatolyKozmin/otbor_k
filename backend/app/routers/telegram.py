@@ -3,11 +3,14 @@ Telegram-интеграция: управление чатами и отправ
 
 Карточка генерируется через Pillow (800×480, фон #441766, белый текст),
 отправляется через aiogram Bot.send_photo.
+
+Polling: при старте приложения запускается aiogram-поллинг (asyncio task).
+  - /chatid в любом чате → бот отвечает chat_id и названием
+  - my_chat_member update → бот автоматически сохраняет новый чат в БД
 """
 import io
 import math
 import os
-import textwrap
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_admin
 from app.config import settings
-from app.database import get_db
+from app.database import get_db, engine
 from app.models import SheetRow, TelegramChat, User
 
 router = APIRouter(prefix="/telegram", tags=["telegram"])
@@ -270,3 +273,64 @@ def _wrap_text(text: str, font, max_width: int, draw) -> list:
     if current:
         lines.append(current)
     return lines
+
+
+# ─── Bot polling ──────────────────────────────────────────────────────────────
+
+async def start_bot_polling() -> None:
+    """Запускается как asyncio-таск при старте FastAPI (только если задан BOT_TOKEN).
+
+    Обрабатывает два события:
+      /chatid  — бот отвечает ID и названием текущего чата
+      my_chat_member — когда бота добавляют в группу, сохраняет чат в БД
+    """
+    from aiogram import Bot, Dispatcher
+    from aiogram.filters import Command
+    from aiogram.types import ChatMemberUpdated, Message
+
+    bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
+    dp = Dispatcher()
+
+    @dp.message(Command("chatid"))
+    async def cmd_chatid(message: Message) -> None:
+        chat = message.chat
+        name = chat.title or chat.full_name or str(chat.id)
+        await message.reply(
+            f"Chat ID: <code>{chat.id}</code>\nНазвание: {name}",
+            parse_mode="HTML",
+        )
+
+    @dp.my_chat_member()
+    async def on_my_chat_member(update: ChatMemberUpdated) -> None:
+        """Автоматически сохраняем чат, когда бота добавляют в группу/канал."""
+        new_status = update.new_chat_member.status
+        if new_status not in ("member", "administrator"):
+            return
+        chat = update.chat
+        if chat.type not in ("group", "supergroup", "channel"):
+            return
+        db = Session(engine)
+        try:
+            existing = (
+                db.query(TelegramChat)
+                .filter(TelegramChat.chat_id == str(chat.id))
+                .first()
+            )
+            if not existing:
+                title = chat.title or str(chat.id)
+                db.add(TelegramChat(chat_id=str(chat.id), title=title, faculties=[]))
+                db.commit()
+                print(f"[bot] Новый чат сохранён: {title} ({chat.id})")
+            else:
+                # Обновляем название если изменилось
+                if chat.title and existing.title != chat.title:
+                    existing.title = chat.title
+                    db.commit()
+        finally:
+            db.close()
+
+    print("[bot] Polling started")
+    try:
+        await dp.start_polling(bot, allowed_updates=["message", "my_chat_member"])
+    finally:
+        await bot.session.close()
