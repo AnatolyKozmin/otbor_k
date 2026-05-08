@@ -87,13 +87,16 @@ ANKETA_CRITERIA = [
 ]
 
 HOMEWORK_CRITERIA = [
-    {"key": "creativity_initiative",  "label": "Креативное мышление + Инициативность", "options": [0, 1, 2, 3]},
-    {"key": "efcom",                  "label": "Эффективные коммуникации",              "options": [0, 1, 2, 3]},
-    {"key": "initiative",             "label": "Инициативность",                        "options": [0, 1, 2, 3]},
-    {"key": "npb_knowledge",          "label": "Знание НПБ",                            "options": [0, 1, 2, 3]},
-    {"key": "critical_thinking",      "label": "Критическое мышление",                  "options": [0, 1, 2, 3]},
-    {"key": "emotional_intelligence", "label": "Эмоциональный интеллект + эмпатия",     "options": [0, 1, 2, 3]},
-    {"key": "project_understanding",  "label": "Понимание проекта",                     "options": [0, 1, 2, 3]},
+    {"key": "creative_thinking",      "label": "Креативное мышление",                "options": [0, 1, 2, 3]},
+    {"key": "efcom",                  "label": "Эффективные коммуникации",           "options": [0, 1, 2, 3]},
+    {"key": "initiative",             "label": "Инициативность",                     "options": [0, 2, 3]},
+    {"key": "critical_thinking",      "label": "Критическое мышление",               "options": [0, 1, 2, 3]},
+    {"key": "emotional_intelligence", "label": "Эмоциональный интеллект + эмпатия",  "options": [0, 1, 2, 3]},
+    {"key": "project_understanding",  "label": "Понимание проекта",                  "options": [0, 1, 3]},
+    {"key": "npb_knowledge",          "label": "Знание НПБ",                         "type": "text"},
+    {"key": "gpt_usage",              "label": "Использование ГПТ",                  "type": "text"},
+    {"key": "questions",              "label": "Вопросы по ДЗ",                      "type": "text"},
+    {"key": "comments",               "label": "Комментарии по ДЗ",                  "type": "text"},
 ]
 
 CRITERIA_BY_SHEET = {
