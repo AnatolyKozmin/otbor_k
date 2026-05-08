@@ -26,21 +26,45 @@ SHEET_LABELS = {
 ANSWER_START = 2
 ANSWER_END   = 38  # slice-end, не включительно
 
-# Столбцы для оценок рецензента (AN = 40-й столбец, 1-based)
-REVIEW_COL_START = 40  # AN (1-based для gspread)
-REVIEW_FIELDS = [
-    "team_work",
-    "efcom",
-    "time_mgmt",
-    "project_understanding",
-    "interest",
-    "awareness",
-    "experience",
-    "leadership",
-    "gpt_usage",
-    "questions",
-    "comments",
-]
+# Столбцы для оценок рецензента (1-based для gspread).
+# anketa: AN = 40, homework: H = 8.
+REVIEW_COL_START_BY_SHEET = {
+    "anketa":   40,  # AN
+    "homework":  8,  # H
+}
+REVIEW_COL_START = 40  # backward compat alias (anketa / sync.py)
+REVIEW_FIELDS_BY_SHEET = {
+    "anketa": [
+        "team_work",
+        "efcom",
+        "time_mgmt",
+        "project_understanding",
+        "interest",
+        "awareness",
+        "experience",
+        "leadership",
+        "gpt_usage",
+        "questions",
+        "comments",
+    ],
+    "homework": [
+        "creative_thinking",
+        "efcom",
+        "initiative",
+        "critical_thinking",
+        "emotional_intelligence",
+        "project_understanding",
+        "npb_knowledge",
+        "gpt_usage",
+        "questions",
+        "comments",
+    ],
+    # Собес пока не пишем в Sheets — добавим, когда определим колонки.
+}
+
+# Алиас для обратной совместимости (используется в sync.py для чистки 'None').
+REVIEW_FIELDS = REVIEW_FIELDS_BY_SHEET["anketa"]
+
 # Колонка A (1) — имя проверяющего; сумму баллов считают формулой в Sheets
 REVIEWER_COL = 1  # A
 
@@ -143,10 +167,14 @@ class GoogleSheetsEngine:
     def update_review_scores(
         self, sheet_key: str, row_number: int, scores: Dict
     ) -> None:
-        """Записывает оценки в Google Sheets (колонки AN→AV для данной строки)."""
+        """Записывает оценки в Google Sheets начиная с колонки, заданной для листа."""
+        fields = REVIEW_FIELDS_BY_SHEET.get(sheet_key)
+        if not fields:
+            return
+        col_start = REVIEW_COL_START_BY_SHEET.get(sheet_key, REVIEW_COL_START)
         ws = self._spreadsheet.worksheet(SHEET_LABELS[sheet_key])
-        values = [[_fmt_cell(scores.get(f)) for f in REVIEW_FIELDS]]
-        start_a1 = gspread.utils.rowcol_to_a1(row_number, REVIEW_COL_START)
+        values = [[_fmt_cell(scores.get(f)) for f in fields]]
+        start_a1 = gspread.utils.rowcol_to_a1(row_number, col_start)
         ws.update(values, start_a1)
 
     def batch_update_reviews(
@@ -155,20 +183,24 @@ class GoogleSheetsEngine:
         """Пакетная запись оценок и имени проверяющего.
 
         updates = [(row_number, scores, reviewer_name), ...]
-        Баллы → AN:AX, имя проверяющего → AY.
+        Баллы → начиная с AN, имя проверяющего → A.
         """
         if not updates:
             return
+        fields = REVIEW_FIELDS_BY_SHEET.get(sheet_key)
+        if not fields:
+            return  # Лист ещё не настроен для записи (например, собес).
+        col_start = REVIEW_COL_START_BY_SHEET.get(sheet_key, REVIEW_COL_START)
         ws = self._spreadsheet.worksheet(SHEET_LABELS[sheet_key])
         batch = []
         for row_number, scores, reviewer_name in updates:
-            start_a1 = gspread.utils.rowcol_to_a1(row_number, REVIEW_COL_START)
+            start_a1 = gspread.utils.rowcol_to_a1(row_number, col_start)
             end_a1 = gspread.utils.rowcol_to_a1(
-                row_number, REVIEW_COL_START + len(REVIEW_FIELDS) - 1
+                row_number, col_start + len(fields) - 1
             )
             batch.append({
                 "range": f"{start_a1}:{end_a1}",
-                "values": [[_fmt_cell(scores.get(f)) for f in REVIEW_FIELDS]],
+                "values": [[_fmt_cell(scores.get(f)) for f in fields]],
             })
             reviewer_a1 = gspread.utils.rowcol_to_a1(row_number, REVIEWER_COL)
             batch.append({

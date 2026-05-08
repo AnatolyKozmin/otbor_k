@@ -124,7 +124,8 @@ def do_full_export() -> Dict:
         }
     """
     from app.sheets import (
-        GoogleSheetsEngine, REVIEW_COL_START, REVIEW_FIELDS, SHEET_LABELS,
+        GoogleSheetsEngine, REVIEW_COL_START_BY_SHEET, REVIEW_COL_START,
+        REVIEW_FIELDS_BY_SHEET, SHEET_LABELS,
     )
 
     result = {
@@ -172,15 +173,16 @@ def do_full_export() -> Dict:
                 result["errors"].append({"sheet": sheet_key, "message": str(exc)})
                 print(f"[full-export] Ошибка для листа {sheet_key}: {exc}")
 
-        # 2. Чистка стилых "None" в колонках баллов на всех листах
-        end_col = REVIEW_COL_START + len(REVIEW_FIELDS) - 1
-        start_letter = gspread.utils.rowcol_to_a1(1, REVIEW_COL_START).rstrip("0123456789")
-        end_letter = gspread.utils.rowcol_to_a1(1, end_col).rstrip("0123456789")
-
-        # Пока трогаем только анкету. Домашка и собес ещё не используются
-        # для оценивания — у них даже нет колонок AN:AX.
-        for sheet_key in ("anketa",):
-            sheet_name = SHEET_LABELS[sheet_key]
+        # 2. Чистка стилых "None" в колонках баллов. Длина диапазона зависит от листа,
+        #    т.к. у анкеты и домашки разные наборы критериев.
+        for sheet_key, fields in REVIEW_FIELDS_BY_SHEET.items():
+            sheet_name = SHEET_LABELS.get(sheet_key)
+            if not sheet_name or not fields:
+                continue
+            col_start = REVIEW_COL_START_BY_SHEET.get(sheet_key, REVIEW_COL_START)
+            end_col = col_start + len(fields) - 1
+            start_letter = gspread.utils.rowcol_to_a1(1, col_start).rstrip("0123456789")
+            end_letter = gspread.utils.rowcol_to_a1(1, end_col).rstrip("0123456789")
             try:
                 ws = gs._spreadsheet.worksheet(sheet_name)
             except gspread.WorksheetNotFound:
@@ -193,7 +195,7 @@ def do_full_export() -> Dict:
                         continue  # заголовок
                     for col_offset, cell in enumerate(row):
                         if cell == "None":
-                            abs_col = REVIEW_COL_START + col_offset
+                            abs_col = col_start + col_offset
                             a1 = gspread.utils.rowcol_to_a1(row_idx, abs_col)
                             batch.append({"range": a1, "values": [[""]]})
                 if batch:
