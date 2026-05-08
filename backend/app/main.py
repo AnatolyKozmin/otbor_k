@@ -61,6 +61,30 @@ def _sync_loop():
             print(f"[sync] Неожиданная ошибка: {exc}")
 
 
+def _homework_loop():
+    """Каждые 5 минут: подгружаем новые домашки и автоматически распределяем."""
+    from app.routers.admin_ops import sync_homework_and_distribute
+
+    while True:
+        time.sleep(300)  # 5 минут
+        db = Session(engine)
+        try:
+            result = sync_homework_and_distribute(db)
+            if result.get("loaded_new") or result.get("distributed"):
+                print(
+                    f"[homework] загружено новых: {result['loaded_new']}, "
+                    f"распределено: {result['distributed']}, "
+                    f"потеряно (no_id/no_anketa/no_coord): "
+                    f"{result['lost_no_id']}/{result['lost_no_anketa']}/{result['lost_no_coord']}"
+                )
+            for err in result.get("errors", []):
+                print(f"[homework] error: {err}")
+        except Exception as exc:
+            print(f"[homework] Неожиданная ошибка: {exc}")
+        finally:
+            db.close()
+
+
 # ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
@@ -71,6 +95,7 @@ async def lifespan(app: FastAPI):
     _migrate_db()
     _seed_users()
     threading.Thread(target=_sync_loop, daemon=True, name="sheets-sync").start()
+    threading.Thread(target=_homework_loop, daemon=True, name="homework-sync").start()
     bot_task = None
     if settings.TELEGRAM_BOT_TOKEN:
         from app.routers.telegram import start_bot_polling

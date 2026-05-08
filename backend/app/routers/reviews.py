@@ -72,7 +72,7 @@ def _redis_alive() -> bool:
 
 
 # ---------- Scoring criteria --------------------------------------------------
-SCORE_CRITERIA = [
+ANKETA_CRITERIA = [
     {"key": "team_work",             "label": "Работа в команде",          "options": [0, 1, 2, 3]},
     {"key": "efcom",                 "label": "Эфком",                     "options": [0, 1, 2, 3]},
     {"key": "time_mgmt",             "label": "Тайм-менеджмент",           "options": [0, 1, 2, 3]},
@@ -85,6 +85,25 @@ SCORE_CRITERIA = [
     {"key": "questions",             "label": "Вопросы по анкете",           "type": "text"},
     {"key": "comments",              "label": "Комментарии по анкете",        "type": "text"},
 ]
+
+HOMEWORK_CRITERIA = [
+    {"key": "creativity_initiative",  "label": "Креативное мышление + Инициативность", "options": [0, 1, 2, 3]},
+    {"key": "efcom",                  "label": "Эффективные коммуникации",              "options": [0, 1, 2, 3]},
+    {"key": "initiative",             "label": "Инициативность",                        "options": [0, 1, 2, 3]},
+    {"key": "npb_knowledge",          "label": "Знание НПБ",                            "options": [0, 1, 2, 3]},
+    {"key": "critical_thinking",      "label": "Критическое мышление",                  "options": [0, 1, 2, 3]},
+    {"key": "emotional_intelligence", "label": "Эмоциональный интеллект + эмпатия",     "options": [0, 1, 2, 3]},
+    {"key": "project_understanding",  "label": "Понимание проекта",                     "options": [0, 1, 2, 3]},
+]
+
+CRITERIA_BY_SHEET = {
+    "anketa":    ANKETA_CRITERIA,
+    "homework":  HOMEWORK_CRITERIA,
+    "interview": ANKETA_CRITERIA,  # пока такие же, как у анкеты
+}
+
+# Алиас для обратной совместимости.
+SCORE_CRITERIA = ANKETA_CRITERIA
 
 # ---------- Router -----------------------------------------------------------
 router = APIRouter(prefix="/reviews", tags=["reviews"])
@@ -112,9 +131,10 @@ def get_review_status(
 
 
 @router.get("/criteria")
-def get_criteria():
+def get_criteria(sheet: str = "anketa"):
     # Проверяем Redis здесь и сейчас, а не значение времени старта.
-    return {"criteria": SCORE_CRITERIA, "redis_available": _redis_alive()}
+    criteria = CRITERIA_BY_SHEET.get(sheet, ANKETA_CRITERIA)
+    return {"criteria": criteria, "redis_available": _redis_alive()}
 
 
 @router.get("/{sheet}/{row_number}")

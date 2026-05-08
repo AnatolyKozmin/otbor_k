@@ -307,7 +307,7 @@ onMounted(async () => {
   try {
     const [rowRes, critRes, reviewRes] = await Promise.all([
       api.get(`/sheets/${sheet}/${rowNumber}`),
-      api.get('/reviews/criteria'),
+      api.get('/reviews/criteria', { params: { sheet } }),
       api.get(`/reviews/${sheet}/${rowNumber}`),
     ])
 

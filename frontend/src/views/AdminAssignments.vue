@@ -13,10 +13,90 @@
         >{{ tab.label }}</button>
       </div>
 
-      <button class="btn-distribute" :disabled="distributing" @click="doDistribute">
+      <button
+        v-if="activeTab === 'homework'"
+        class="btn-distribute"
+        :disabled="syncing"
+        @click="syncHomework"
+      >
+        {{ syncing ? 'Синхронизирую…' : '⟳ Синхронизировать домашки' }}
+      </button>
+      <button
+        v-else
+        class="btn-distribute"
+        :disabled="distributing"
+        @click="doDistribute"
+      >
         {{ distributing ? 'Распределяю…' : 'Распределить равномерно' }}
       </button>
     </div>
+
+    <!-- Homework-only stats: потери по причинам + нагрузка координаторов -->
+    <template v-if="activeTab === 'homework' && hwStats">
+      <div class="stats-bar">
+        <div class="stat">
+          <span class="stat-val">{{ hwStats.total }}</span>
+          <span class="stat-lbl">Всего домашек</span>
+        </div>
+        <div class="stat ok">
+          <span class="stat-val">{{ hwStats.distributed }}</span>
+          <span class="stat-lbl">Распределено</span>
+        </div>
+        <div class="stat warn" v-if="hwStats.lost_no_id > 0">
+          <span class="stat-val">{{ hwStats.lost_no_id }}</span>
+          <span class="stat-lbl">Без студ. билета</span>
+        </div>
+        <div class="stat warn" v-if="hwStats.lost_no_anketa > 0">
+          <span class="stat-val">{{ hwStats.lost_no_anketa }}</span>
+          <span class="stat-lbl">Нет матча с анкетой</span>
+        </div>
+        <div class="stat warn" v-if="hwStats.lost_no_coord > 0">
+          <span class="stat-val">{{ hwStats.lost_no_coord }}</span>
+          <span class="stat-lbl">Нет координатора</span>
+        </div>
+      </div>
+
+      <div class="hw-coord-card">
+        <h3>Нагрузка координаторов (домашка)</h3>
+        <div class="hw-coord-table-wrap">
+          <table class="hw-coord-table">
+            <thead>
+              <tr>
+                <th>Координатор</th>
+                <th>Факультеты</th>
+                <th class="num-col">Назначено</th>
+                <th class="num-col">Проверено</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="c in hwStats.coordinators" :key="c.id">
+                <td class="name-cell">{{ c.name }}</td>
+                <td>
+                  <span v-if="c.faculties.length" class="fac-tags-mini">
+                    <span v-for="f in c.faculties" :key="f" class="fac-mini">{{ f }}</span>
+                  </span>
+                  <span v-else class="muted">—</span>
+                </td>
+                <td class="num-col">
+                  <span v-if="c.assigned > 0" class="cnt">{{ c.assigned }}</span>
+                  <span v-else class="muted">—</span>
+                </td>
+                <td class="num-col">
+                  <span
+                    v-if="c.assigned > 0"
+                    class="cnt"
+                    :class="{ done: c.reviewed === c.assigned }"
+                  >
+                    {{ c.reviewed }}<span class="cnt-sep">/</span>{{ c.assigned }}
+                  </span>
+                  <span v-else class="muted">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </template>
 
     <!-- Статистика -->
     <div v-if="stats" class="stats-bar">
@@ -112,6 +192,8 @@ const stats = ref(null)
 const search = ref('')
 const distributing = ref(false)
 const distMsg = ref(null)
+const syncing = ref(false)
+const hwStats = ref(null)
 
 const filteredRows = computed(() => {
   if (!search.value.trim()) return rows.value
@@ -134,8 +216,12 @@ async function switchTab(key) {
 async function loadTab(key) {
   state.value = 'loading'
   distMsg.value = null
+  hwStats.value = null
   try {
-    const { data } = await api.get(`/admin/assignments/${key}`)
+    const reqs = [api.get(`/admin/assignments/${key}`)]
+    if (key === 'homework') reqs.push(api.get('/admin/homework/stats'))
+    const responses = await Promise.all(reqs)
+    const data = responses[0].data
     if (!data.total) {
       state.value = 'empty'
       rows.value = []
@@ -145,9 +231,35 @@ async function loadTab(key) {
       rows.value = data.rows
       stats.value = { total: data.total, assigned: data.assigned }
     }
+    if (key === 'homework') {
+      hwStats.value = responses[1].data
+    }
   } catch (e) {
     state.value = 'error'
     errorMsg.value = e.response?.data?.detail || 'Ошибка загрузки'
+  }
+}
+
+async function syncHomework() {
+  syncing.value = true
+  distMsg.value = null
+  try {
+    const { data } = await api.post('/admin/homework/sync')
+    const parts = []
+    if (data.loaded_new) parts.push(`загружено: ${data.loaded_new}`)
+    if (data.distributed) parts.push(`распределено: ${data.distributed}`)
+    const lost = data.lost_no_id + data.lost_no_anketa + data.lost_no_coord
+    if (lost) parts.push(`не назначено: ${lost}`)
+    distMsg.value = {
+      ok: !data.errors?.length,
+      text: parts.length ? parts.join(', ') : 'Новых домашек нет',
+    }
+    if (data.errors?.length) distMsg.value.text += ` · ошибки: ${data.errors.join('; ')}`
+    await loadTab('homework')
+  } catch (e) {
+    distMsg.value = { ok: false, text: e.response?.data?.detail || 'Ошибка синхронизации' }
+  } finally {
+    syncing.value = false
   }
 }
 
@@ -240,6 +352,61 @@ h2 { margin: 0; font-size: 1.4rem; color: #1a1a2e; flex-shrink: 0; }
 }
 .dist-msg.ok  { background: rgba(6,214,160,0.1); color: #05a87c; }
 .dist-msg.err { background: rgba(230,57,70,0.08); color: #e63946; }
+
+.hw-coord-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  padding: 1.25rem 1.4rem;
+  margin-bottom: 1rem;
+}
+.hw-coord-card h3 { margin: 0 0 0.85rem; color: #1a1a2e; font-size: 0.95rem; }
+
+.hw-coord-table-wrap { overflow-x: auto; }
+
+.hw-coord-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.hw-coord-table th {
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.7rem;
+  color: #888;
+  font-weight: 600;
+  border-bottom: 1.5px solid #f0f0f0;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.hw-coord-table th.num-col { text-align: center; width: 110px; }
+.hw-coord-table td {
+  padding: 0.55rem 0.6rem;
+  border-bottom: 1px solid #f7f7f7;
+  color: #333;
+  vertical-align: middle;
+}
+.hw-coord-table td.num-col { text-align: center; }
+.hw-coord-table .name-cell { font-weight: 500; white-space: nowrap; }
+
+.fac-tags-mini { display: flex; gap: 0.25rem; flex-wrap: wrap; }
+.fac-mini {
+  background: rgba(67,97,238,0.08);
+  color: #4361ee;
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.cnt {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: #4361ee;
+  font-size: 0.85rem;
+}
+.cnt.done { color: #06a07a; }
+.cnt-sep { color: #ccc; margin: 0 0.15rem; font-weight: 400; }
 
 .search-wrap { margin-bottom: 0.75rem; }
 .search-input {
