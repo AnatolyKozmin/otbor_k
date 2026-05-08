@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import require_admin
 from app.database import get_db
-from app.models import Assignment, Review, SheetRow, SHEET_KEYS, User, Role
+from app.models import Assignment, Availability, Review, SheetRow, SHEET_KEYS, User, Role
 from app.sync import do_full_export
 
 FACULTY_NAMES = {'НАБ', 'ФЭБ', 'ВШУ', 'ИТиАБД', 'СНиМК', 'МЭО', 'Финфак', 'Юрфак'}
@@ -477,8 +477,10 @@ def homework_stats(
     lost_no_anketa = 0
     lost_no_coord = 0
 
+    lost_rows = []
     if hw_rows:
         hw_id_col = _detect_student_id_col(hw_rows)
+        hw_fio_col = _detect_fio_col(hw_rows)
         id_to_faculty = _build_id_to_faculty_map(db)
 
         coords = [
@@ -491,16 +493,21 @@ def homework_stats(
             for r in hw_rows:
                 if r.row_number in assigned_rn:
                     continue
-                sid = _normalize_student_id(r.data.get(hw_id_col, ""))
+                fio = str(r.data.get(hw_fio_col, "") or "") if hw_fio_col else ""
+                sid_raw = str(r.data.get(hw_id_col, "") or "")
+                sid = _normalize_student_id(sid_raw)
                 if not sid:
                     lost_no_id += 1
+                    lost_rows.append({"row_number": r.row_number, "fio": fio, "student_id": "", "reason": "no_id"})
                     continue
                 faculty = id_to_faculty.get(sid)
                 if not faculty:
                     lost_no_anketa += 1
+                    lost_rows.append({"row_number": r.row_number, "fio": fio, "student_id": sid_raw, "reason": "no_anketa"})
                     continue
                 if faculty not in covered_faculties:
                     lost_no_coord += 1
+                    lost_rows.append({"row_number": r.row_number, "fio": fio, "student_id": sid_raw, "faculty": faculty, "reason": "no_coord"})
 
     # Нагрузка по координаторам — назначено / проверено
     coord_users = (
@@ -529,11 +536,24 @@ def homework_stats(
         for c in coord_users
     ]
 
+    # Координаторы без занятости (нет ни одной записи в availability)
+    coords_with_avail = {
+        row.user_id
+        for row in db.query(Availability.user_id).distinct().all()
+    }
+    no_availability = [
+        {"id": c.id, "name": c.name}
+        for c in coord_users
+        if c.id not in coords_with_avail
+    ]
+
     return {
         "total": total,
         "distributed": distributed,
         "lost_no_id": lost_no_id,
         "lost_no_anketa": lost_no_anketa,
         "lost_no_coord": lost_no_coord,
+        "lost_rows": lost_rows,
         "coordinators": coordinators,
+        "no_availability": no_availability,
     }

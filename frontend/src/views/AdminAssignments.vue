@@ -56,6 +56,44 @@
         </div>
       </div>
 
+      <!-- Список потерянных домашек -->
+      <div v-if="hwStats.lost_rows?.length" class="lost-card">
+        <button class="lost-toggle" @click="lostOpen = !lostOpen">
+          <span class="lost-title">Потерянные домашки ({{ hwStats.lost_rows.length }})</span>
+          <span class="lost-chevron" :class="{ open: lostOpen }">▾</span>
+        </button>
+        <div v-if="lostOpen" class="lost-table-wrap">
+          <table class="lost-table">
+            <thead>
+              <tr>
+                <th class="num-col">#</th>
+                <th>ФИО</th>
+                <th>Студ. билет</th>
+                <th>Причина</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in hwStats.lost_rows" :key="r.row_number">
+                <td class="num-col muted">{{ r.row_number }}</td>
+                <td>{{ r.fio || '—' }}</td>
+                <td class="mono">{{ r.student_id || '—' }}</td>
+                <td>
+                  <span class="reason-badge" :class="r.reason">
+                    {{ REASON_LABELS[r.reason] }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Координаторы без занятости -->
+      <div v-if="hwStats.no_availability?.length" class="no-avail-card">
+        <span class="no-avail-title">Не заполнили занятость:</span>
+        <span v-for="c in hwStats.no_availability" :key="c.id" class="no-avail-name">{{ c.name }}</span>
+      </div>
+
       <div class="hw-coord-card">
         <h3>Нагрузка координаторов (домашка)</h3>
         <div class="hw-coord-table-wrap">
@@ -184,6 +222,12 @@ const TABS = [
   { key: 'homework', label: 'Домашка' },
 ]
 
+const REASON_LABELS = {
+  no_id:      'нет студ. билета',
+  no_anketa:  'нет матча в анкете',
+  no_coord:   'нет координатора',
+}
+
 const activeTab = ref('anketa')
 const state = ref('loading')
 const errorMsg = ref('')
@@ -194,6 +238,7 @@ const distributing = ref(false)
 const distMsg = ref(null)
 const syncing = ref(false)
 const hwStats = ref(null)
+const lostOpen = ref(false)
 
 const filteredRows = computed(() => {
   if (!search.value.trim()) return rows.value
@@ -352,6 +397,81 @@ h2 { margin: 0; font-size: 1.4rem; color: #1a1a2e; flex-shrink: 0; }
 }
 .dist-msg.ok  { background: rgba(6,214,160,0.1); color: #05a87c; }
 .dist-msg.err { background: rgba(230,57,70,0.08); color: #e63946; }
+
+/* Lost rows */
+.lost-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+.lost-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 1.4rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+.lost-title { font-weight: 600; font-size: 0.9rem; color: #e08c00; }
+.lost-chevron { font-size: 1rem; color: #aaa; transition: transform 0.15s; }
+.lost-chevron.open { transform: rotate(180deg); }
+.lost-table-wrap { overflow-x: auto; border-top: 1px solid #f0f0f0; }
+.lost-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.lost-table th {
+  padding: 0.45rem 0.8rem;
+  text-align: left;
+  font-size: 0.7rem;
+  color: #888;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid #f0f0f0;
+}
+.lost-table td {
+  padding: 0.5rem 0.8rem;
+  border-bottom: 1px solid #fafafa;
+  color: #333;
+}
+.lost-table .num-col { width: 52px; text-align: center; }
+.mono { font-family: monospace; font-size: 0.82rem; }
+
+.reason-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.reason-badge.no_id     { background: rgba(230,57,70,0.1);  color: #c0392b; }
+.reason-badge.no_anketa { background: rgba(255,190,11,0.15); color: #b8860b; }
+.reason-badge.no_coord  { background: rgba(67,97,238,0.1);  color: #4361ee; }
+
+/* No-availability warning */
+.no-avail-card {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.65rem 1rem;
+  background: rgba(230,57,70,0.06);
+  border-radius: 10px;
+  border: 1px solid rgba(230,57,70,0.15);
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+.no-avail-title { color: #c0392b; font-weight: 600; white-space: nowrap; }
+.no-avail-name {
+  background: rgba(230,57,70,0.1);
+  color: #c0392b;
+  border-radius: 6px;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.8rem;
+}
 
 .hw-coord-card {
   background: white;
