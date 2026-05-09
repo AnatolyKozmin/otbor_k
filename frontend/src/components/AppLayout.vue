@@ -6,8 +6,10 @@
         <router-link to="/">Дашборд</router-link>
         <router-link to="/applicants">Заявки</router-link>
         <router-link to="/availability">Занятость</router-link>
+        <router-link to="/interviews">Собеседования</router-link>
         <router-link v-if="auth.isAdmin" to="/admin">Управление</router-link>
         <router-link v-if="auth.isAdmin" to="/admin/assignments">Распределение</router-link>
+        <router-link v-if="auth.isAdmin" to="/admin/interview">Собесы (адм.)</router-link>
         <router-link v-if="auth.isAdmin" to="/admin/availability">Занятость (адм.)</router-link>
         <router-link v-if="auth.isAdmin" to="/admin/settings">Настройки</router-link>
       </nav>
@@ -39,7 +41,7 @@ function logout() {
 </script>
 
 <style scoped>
-.layout { display: flex; min-height: 100vh; }
+.layout { display: flex; height: 100vh; overflow: hidden; }
 
 .sidebar {
   width: 240px;
@@ -116,5 +118,5 @@ nav a.router-link-active { background: #2d2d44; color: white; }
 
 .logout-btn:hover { background: #e63946; border-color: #e63946; color: white; }
 
-.content { flex: 1; padding: 2rem; background: #f0f2f5; overflow-y: auto; }
+.content { flex: 1; padding: 2rem; background: #f0f2f5; overflow-y: auto; min-height: 0; }
 </style>

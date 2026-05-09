@@ -47,6 +47,21 @@ const routes = [
     component: () => import('../views/Settings.vue'),
     meta: { requiresAuth: true, requiresAdmin: true },
   },
+  {
+    path: '/admin/interview',
+    component: () => import('../views/AdminInterview.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: '/interviews',
+    component: () => import('../views/InterviewList.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/interviews/:rowNumber',
+    component: () => import('../views/InterviewForm.vue'),
+    meta: { requiresAuth: true },
+  },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
 

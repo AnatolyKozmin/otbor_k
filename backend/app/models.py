@@ -98,6 +98,17 @@ class TelegramChat(Base):
     faculties = Column(JSON, nullable=False, default=list)  # ["НАБ", "ФЭБ", ...]
 
 
+class InterviewAssignment(Base):
+    """Назначение двух проверяющих на одно собеседование."""
+    __tablename__ = "interview_assignments"
+
+    id = Column(Integer, primary_key=True)
+    row_number = Column(Integer, nullable=False, unique=True, index=True)
+    reviewer1_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewer2_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+
+
 class Review(Base):
     __tablename__ = "reviews"
 

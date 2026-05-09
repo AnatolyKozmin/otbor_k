@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(pip3 install *)",
+      "Bash(curl -s http://localhost:8090/api/interview/form)"
     ]
   }
 }
