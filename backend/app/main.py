@@ -12,7 +12,7 @@ from app.auth import hash_password
 from app.config import settings
 from app.database import engine, Base
 from app.models import User, Role, TelegramChat, InterviewAssignment  # noqa: F401
-from app.routers import auth, users, sheets, reviews, admin_ops, availability, telegram, interview
+from app.routers import auth, users, sheets, reviews, admin_ops, availability, telegram, interview, booking
 from app.sync import do_sync
 
 
@@ -116,6 +116,15 @@ def _migrate_db():
             conn.execute(text("ALTER TABLE users ADD COLUMN faculties JSON DEFAULT '[]'"))
             conn.commit()
 
+        ia_cols = [c["name"] for c in inspect(engine).get_columns("interview_assignments")]
+        if "slot_date" not in ia_cols:
+            conn.execute(text("ALTER TABLE interview_assignments ADD COLUMN slot_date VARCHAR"))
+        if "slot_hour" not in ia_cols:
+            conn.execute(text("ALTER TABLE interview_assignments ADD COLUMN slot_hour INTEGER"))
+        if "booked_at" not in ia_cols:
+            conn.execute(text("ALTER TABLE interview_assignments ADD COLUMN booked_at DATETIME"))
+        conn.commit()
+
 
 def _seed_users():
     db = Session(engine)
@@ -151,6 +160,7 @@ app.include_router(admin_ops.router)
 app.include_router(availability.router)
 app.include_router(telegram.router)
 app.include_router(interview.router)
+app.include_router(booking.router)
 
 
 @app.get("/health")

@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean, Column, DateTime, Enum, ForeignKey,
@@ -10,6 +10,11 @@ from sqlalchemy.sql import func
 from app.database import Base
 
 SHEET_KEYS = ("anketa", "homework", "interview")
+
+
+def utc_naive_now() -> datetime:
+    """Наивное UTC-время для колонок DateTime без timezone=True (как раньше с utcnow)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class Role(str, enum.Enum):
@@ -47,7 +52,7 @@ class Assignment(Base):
     sheet = Column(String, nullable=False, index=True)
     row_number = Column(Integer, nullable=False)
     reviewer_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    assigned_at = Column(DateTime, default=datetime.utcnow)
+    assigned_at = Column(DateTime, default=utc_naive_now)
 
     __table_args__ = (
         UniqueConstraint("sheet", "row_number", name="uq_assignment_row"),
@@ -99,14 +104,21 @@ class TelegramChat(Base):
 
 
 class InterviewAssignment(Base):
-    """Назначение двух проверяющих на одно собеседование."""
+    """Назначение двух проверяющих на одно собеседование + слот, на который записан кандидат."""
     __tablename__ = "interview_assignments"
 
     id = Column(Integer, primary_key=True)
     row_number = Column(Integer, nullable=False, unique=True, index=True)
     reviewer1_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     reviewer2_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    assigned_at = Column(DateTime, default=datetime.utcnow)
+    slot_date = Column(String, nullable=True)   # YYYY-MM-DD
+    slot_hour = Column(Integer, nullable=True)  # 9..21
+    booked_at = Column(DateTime, nullable=True)
+    assigned_at = Column(DateTime, default=utc_naive_now)
+
+    __table_args__ = (
+        Index("ix_interview_slot", "slot_date", "slot_hour"),
+    )
 
 
 class Review(Base):
@@ -119,7 +131,7 @@ class Review(Base):
     scores = Column(JSON, nullable=False, default=dict)
     # saved_at обновляется ВРУЧНУЮ при изменении scores в save_review.
     # БЕЗ onupdate — иначе sync ломал бы оптимистичную блокировку.
-    saved_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    saved_at = Column(DateTime, default=utc_naive_now, nullable=False)
     synced_to_sheets = Column(Boolean, default=False, nullable=False)
 
     __table_args__ = (
