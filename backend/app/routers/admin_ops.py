@@ -557,3 +557,73 @@ def homework_stats(
         "coordinators": coordinators,
         "no_availability": no_availability,
     }
+
+
+# ---------------------------------------------------------------------------
+# Редактирование строки анкеты / собеса
+# ---------------------------------------------------------------------------
+
+class EditRowPayload(BaseModel):
+    fields: dict  # {column_name: new_value}
+
+
+@router.get("/anketa/search")
+def search_anketa(
+    q: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Поиск по ФИО в анкетах — возвращает совпадающие строки."""
+    rows = db.query(SheetRow).filter(SheetRow.sheet == "anketa").all()
+    if not rows:
+        return {"rows": []}
+
+    fio_col = _detect_fio_col(rows)
+    sid_col = _detect_student_id_col(rows)
+    q_lower = q.strip().lower()
+
+    result = []
+    for r in rows:
+        fio = str(r.data.get(fio_col, "") or "").strip() if fio_col else ""
+        if q_lower and q_lower not in fio.lower():
+            continue
+        result.append({
+            "row_number": r.row_number,
+            "fio": fio,
+            "student_id": str(r.data.get(sid_col, "") or "").strip() if sid_col else "",
+        })
+    return {"rows": result[:20]}
+
+
+@router.get("/anketa/{row_number}")
+def get_anketa_row(
+    row_number: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Получить все поля строки анкеты для редактирования."""
+    row = db.query(SheetRow).filter(
+        SheetRow.sheet == "anketa", SheetRow.row_number == row_number
+    ).first()
+    if not row:
+        raise HTTPException(404, "Строка не найдена")
+    fields = {k: v for k, v in row.data.items() if not k.startswith("_")}
+    return {"row_number": row_number, "fields": fields}
+
+
+@router.patch("/anketa/{row_number}")
+def update_anketa_row(
+    row_number: int,
+    payload: EditRowPayload,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Обновить указанные поля строки анкеты."""
+    row = db.query(SheetRow).filter(
+        SheetRow.sheet == "anketa", SheetRow.row_number == row_number
+    ).first()
+    if not row:
+        raise HTTPException(404, "Строка не найдена")
+    row.data = {**row.data, **payload.fields}
+    db.commit()
+    return {"ok": True}

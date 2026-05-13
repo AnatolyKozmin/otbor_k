@@ -52,7 +52,10 @@
               <div>{{ row.fio || '—' }}</div>
               <span v-if="row.faculty" class="fac-badge">{{ row.faculty }}</span>
             </td>
-            <td class="mono muted">{{ row.student_id || '—' }}</td>
+            <td class="mono muted">
+              {{ row.student_id || '—' }}
+              <button class="edit-sid-btn" @click="openEditModal(row)" title="Редактировать анкету">✏️</button>
+            </td>
             <td>
               <select
                 class="rev-select"
@@ -113,6 +116,42 @@
 
     <!-- Saving indicator -->
     <div v-if="savingRow" class="saving-toast">Сохраняю…</div>
+
+    <!-- Edit anketa modal -->
+    <Teleport to="body">
+      <div v-if="editModal.open" class="modal-overlay" @click.self="editModal.open = false">
+        <div class="modal edit-modal">
+          <div class="modal-head">
+            <div>
+              <div class="modal-title">Редактирование анкеты</div>
+              <div class="modal-sub" v-if="editModal.fio">{{ editModal.fio }}</div>
+            </div>
+            <button class="close-btn" @click="editModal.open = false">✕</button>
+          </div>
+
+          <div v-if="editModal.loading" class="modal-state">Загрузка…</div>
+          <div v-else-if="editModal.error" class="modal-state err">{{ editModal.error }}</div>
+          <div v-else class="edit-content">
+            <p class="edit-hint">Изменения применяются только в базе данных — Google Sheets не обновляется.</p>
+            <div v-for="(val, key) in editModal.fields" :key="key" class="edit-field">
+              <label class="edit-label">{{ key }}</label>
+              <input
+                class="edit-input"
+                :value="editModal.fields[key]"
+                @input="editModal.fields[key] = $event.target.value"
+              />
+            </div>
+            <div v-if="editModal.saveError" class="modal-state err" style="padding:0.5rem 0">{{ editModal.saveError }}</div>
+            <div class="modal-actions">
+              <button class="btn-cancel" @click="editModal.open = false">Отмена</button>
+              <button class="btn-confirm" :disabled="editModal.saving" @click="saveEditModal">
+                {{ editModal.saving ? 'Сохраняю…' : 'Сохранить' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- Reco availability modal -->
     <Teleport to="body">
@@ -193,6 +232,7 @@ const search = ref('')
 const savingRow = ref(false)
 
 const recoModal = ref({ open: false, loading: false, error: '', names: '', data: {} })
+const editModal = ref({ open: false, loading: false, error: '', saveError: '', saving: false, rowNumber: null, fio: '', fields: {} })
 
 const createModal = ref(false)
 const newFio = ref('')
@@ -369,6 +409,47 @@ function isCommonSlot(date, hour) {
   return coords.length === 2 &&
     coords[0].slots.some(s => s.date === date && s.hour === hour) &&
     coords[1].slots.some(s => s.date === date && s.hour === hour)
+}
+
+async function openEditModal(row) {
+  // Нужно найти row_number анкеты по студ. билету
+  editModal.value = { open: true, loading: true, error: '', saveError: '', saving: false, rowNumber: null, fio: row.fio, fields: {} }
+  try {
+    // Ищем анкету через search по ФИО
+    const sid = row.student_id
+    // Пробуем получить прямо через поиск
+    const { data } = await api.get('/admin/anketa/search', { params: { q: row.fio || '' } })
+    // Ищем совпадение по студ. билету
+    const digits = s => (s || '').replace(/\D/g, '')
+    let found = data.rows.find(r => digits(r.student_id) === digits(sid))
+    if (!found && data.rows.length === 1) found = data.rows[0]
+    if (!found) {
+      editModal.value.error = 'Анкета не найдена. Попробуйте загрузить данные из Sheets.'
+      editModal.value.loading = false
+      return
+    }
+    editModal.value.rowNumber = found.row_number
+    const detail = await api.get(`/admin/anketa/${found.row_number}`)
+    editModal.value.fields = detail.data.fields
+  } catch (e) {
+    editModal.value.error = e.response?.data?.detail || 'Ошибка загрузки'
+  } finally {
+    editModal.value.loading = false
+  }
+}
+
+async function saveEditModal() {
+  editModal.value.saving = true
+  editModal.value.saveError = ''
+  try {
+    await api.patch(`/admin/anketa/${editModal.value.rowNumber}`, { fields: editModal.value.fields })
+    editModal.value.open = false
+    await load()
+  } catch (e) {
+    editModal.value.saveError = e.response?.data?.detail || 'Ошибка сохранения'
+  } finally {
+    editModal.value.saving = false
+  }
 }
 
 async function deleteRow(row) {
@@ -711,6 +792,25 @@ label {
   border-radius: 6px; transition: background 0.15s; flex-shrink: 0;
 }
 .close-btn:hover { background: #f0f2f5; color: #333; }
+
+.edit-sid-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 0.75rem; padding: 0 0.2rem;
+  opacity: 0.3; transition: opacity 0.15s;
+  vertical-align: middle;
+}
+.edit-sid-btn:hover { opacity: 1; }
+
+.edit-modal { width: 560px; max-width: 95vw; max-height: 85vh; display: flex; flex-direction: column; }
+.edit-content { overflow-y: auto; padding: 0.75rem 1.5rem 1.25rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.edit-hint { font-size: 0.78rem; color: #e08c00; background: rgba(255,190,11,0.1); border-radius: 7px; padding: 0.5rem 0.75rem; margin: 0 0 0.25rem; }
+.edit-field { display: flex; flex-direction: column; gap: 0.2rem; }
+.edit-label { font-size: 0.72rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.03em; }
+.edit-input {
+  padding: 0.45rem 0.7rem; border: 1.5px solid #e0e0e0; border-radius: 7px;
+  font-size: 0.875rem; outline: none; transition: border-color 0.15s;
+}
+.edit-input:focus { border-color: #4361ee; }
 
 .state-msg {
   background: white; border-radius: 12px; padding: 3rem;
