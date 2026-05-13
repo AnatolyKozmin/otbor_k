@@ -102,7 +102,7 @@ def admin_overview(
 
     # Собираем все слоты из периода
     slots = []
-    for d in range(9, 24):
+    for d in range(9, 25):
         date = f"2026-05-{d:02d}"
         for h in range(9, 22):
             key = f"{date}:{h}"
