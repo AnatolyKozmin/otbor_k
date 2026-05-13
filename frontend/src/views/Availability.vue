@@ -64,10 +64,12 @@
                   selected: isSelected(d.date, h),
                   weekend: d.weekend,
                   reserve: d.reserve,
+                  past: isPast(d.date, h),
                 }"
-                @click="toggle(d.date, h)"
+                @click="!isPast(d.date, h) && toggle(d.date, h)"
               >
-                <span v-if="isSelected(d.date, h)" class="check">✓</span>
+                <span v-if="isSelected(d.date, h) && !isPast(d.date, h)" class="check">✓</span>
+                <span v-else-if="isPast(d.date, h)" class="past-mark">—</span>
               </td>
             </tr>
           </tbody>
@@ -100,6 +102,12 @@ import AppLayout from '../components/AppLayout.vue'
 import api from '../api'
 
 const HOURS = Array.from({ length: 13 }, (_, i) => 9 + i)  // 9..21
+
+function isPast(date, hour) {
+  const now = new Date()
+  const slot = new Date(`${date}T${String(hour).padStart(2,'0')}:00`)
+  return slot <= now
+}
 const DOW_RU = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
 
 const DATES = Array.from({ length: 16 }, (_, i) => {
@@ -414,6 +422,15 @@ onMounted(load)
   background: linear-gradient(135deg, #0db587 0%, #099971 100%);
   border-color: #099971;
 }
+.cell.past {
+  background: #f0f0f0;
+  border-color: #e0e0e0;
+  cursor: default;
+  opacity: 0.45;
+}
+.cell.past:hover { background: #f0f0f0; border-color: #e0e0e0; }
+.past-mark { color: #bbb; font-size: 0.8rem; }
+
 .cell.selected.reserve {
   background: linear-gradient(135deg, #9b85d8 0%, #7c5cd8 100%);
   border-color: #7c5cd8;

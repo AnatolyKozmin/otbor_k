@@ -217,14 +217,28 @@ async function lookup() {
   }
 }
 
+function filterAvailableSlots(dates) {
+  const now = new Date()
+  const cutoff = new Date(now.getTime() + 12 * 60 * 60 * 1000)
+  return dates
+    .map(day => ({
+      ...day,
+      slots: day.slots.filter(s => {
+        const slot = new Date(`${day.date}T${String(s.hour).padStart(2,'0')}:00`)
+        return slot > cutoff
+      }),
+    }))
+    .filter(day => day.slots.length > 0)
+}
+
 async function loadSlots() {
   slotsLoading.value = true
   try {
     const { data } = await axios.get(`${API_BASE}/booking/slots`, {
       params: { student_id: studentId.value.trim() },
     })
-    recommended.value = data.recommended?.dates || []
-    other.value = data.other?.dates || []
+    recommended.value = filterAvailableSlots(data.recommended?.dates || [])
+    other.value = filterAvailableSlots(data.other?.dates || [])
   } catch (e) {
     errorMsg.value = e.response?.data?.detail || 'Не удалось загрузить слоты'
   } finally {
