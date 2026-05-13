@@ -39,7 +39,7 @@
             </div>
             <div class="bd-row pending" v-else>
               <span>Проверяющие:</span>
-              <b>назначаются координаторами</b>
+              <b>назначаются обучающими координаторами</b>
             </div>
           </div>
           <p class="hint">Хотите перенести запись? Выберите другой слот.</p>
@@ -117,7 +117,7 @@
             </b>
           </div>
         </div>
-        <p class="hint">Проверяющих позже назначат координаторы.</p>
+        <p class="hint">Проверяющих позже назначат обучающие координаторы.</p>
         <div v-if="errorMsg" class="error-box">{{ errorMsg }}</div>
         <div class="actions">
           <button class="ghost-btn" @click="step = 'slots'">← Назад</button>
@@ -137,7 +137,7 @@
             <div class="bd-row"><span>Время:</span> <b>{{ result.slot_hour }}:00 — {{ result.slot_hour + 1 }}:00</b></div>
             <div class="bd-row pending">
               <span>Проверяющие:</span>
-              <b>назначаются координаторами</b>
+              <b>назначаются обучающими координаторами</b>
             </div>
           </div>
           <p class="hint">Сохраните эту страницу или сделайте скриншот. До встречи!</p>
