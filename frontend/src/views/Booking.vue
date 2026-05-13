@@ -77,7 +77,7 @@
                   @click="selectSlot(day.date, s)"
                 >
                   <span class="slot-hour">{{ s.hour }}:00</span>
-                  <span class="slot-meta">{{ s.free_count }} своб.</span>
+                  <span class="slot-meta">{{ s.free_capacity }} мест</span>
                 </button>
               </div>
             </div>
@@ -95,7 +95,7 @@
                   @click="selectSlot(day.date, s)"
                 >
                   <span class="slot-hour">{{ s.hour }}:00</span>
-                  <span class="slot-meta">{{ s.free_count }} своб.</span>
+                  <span class="slot-meta">{{ s.free_capacity }} мест</span>
                 </button>
               </div>
             </div>
