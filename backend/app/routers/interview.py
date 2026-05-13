@@ -126,6 +126,36 @@ def get_form():
     return {"sections": INTERVIEW_FORM}
 
 
+@router.get("/coord-availability")
+def get_coord_availability(
+    ids: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Занятость конкретных координаторов: список доступных слотов по дням."""
+    from app.models import Availability
+
+    coord_ids = [int(x) for x in ids.split(",") if x.strip().isdigit()]
+    if not coord_ids:
+        raise HTTPException(400, "ids не указаны")
+
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(coord_ids)).all()}
+    slots = db.query(Availability).filter(Availability.user_id.in_(coord_ids)).all()
+
+    result: dict[int, dict] = {
+        uid: {"name": users[uid].name if uid in users else f"#{uid}", "slots": []}
+        for uid in coord_ids
+    }
+    for s in slots:
+        if s.user_id in result:
+            result[s.user_id]["slots"].append({"date": s.slot_date, "hour": s.slot_hour})
+
+    for uid in result:
+        result[uid]["slots"].sort(key=lambda x: (x["date"], x["hour"]))
+
+    return {"coordinators": {str(k): v for k, v in result.items()}}
+
+
 @router.get("/my")
 def get_my_interviews(
     db: Session = Depends(get_db),

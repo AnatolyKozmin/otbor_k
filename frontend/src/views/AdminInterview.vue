@@ -86,7 +86,7 @@
             <td class="reco-col">
               <div v-if="!row.slot_date" class="reco muted-empty">—</div>
               <template v-else-if="pickRecommendedPair(row)">
-                <div class="reco" :class="recoClass(row)">
+                <div class="reco reco-clickable" :class="recoClass(row)" @click="openRecoModal(row)">
                   <span class="reco-icon">💡</span>
                   <span class="reco-names">{{ recoNames(row) }}</span>
                   <span class="reco-hint">{{ recoHint(row) }}</span>
@@ -112,6 +112,48 @@
 
     <!-- Saving indicator -->
     <div v-if="savingRow" class="saving-toast">Сохраняю…</div>
+
+    <!-- Reco availability modal -->
+    <Teleport to="body">
+      <div v-if="recoModal.open" class="modal-overlay" @click.self="recoModal.open = false">
+        <div class="modal reco-modal">
+          <div class="modal-head">
+            <div>
+              <div class="modal-title">Занятость проверяющих</div>
+              <div class="modal-sub" v-if="recoModal.names">{{ recoModal.names }}</div>
+            </div>
+            <button class="close-btn" @click="recoModal.open = false">✕</button>
+          </div>
+
+          <div v-if="recoModal.loading" class="modal-state">Загрузка…</div>
+          <div v-else-if="recoModal.error" class="modal-state err">{{ recoModal.error }}</div>
+
+          <div v-else class="avail-content">
+            <div v-for="(coord, uid) in recoModal.data" :key="uid" class="coord-section">
+              <div class="coord-name">{{ coord.name }}</div>
+              <div v-if="!coord.slots.length" class="no-slots">Занятость не заполнена</div>
+              <div v-else class="day-list">
+                <div v-for="(daySlots, date) in groupByDate(coord.slots)" :key="date" class="day-row">
+                  <span class="day-label">{{ formatDate(date) }}</span>
+                  <div class="hour-chips">
+                    <span
+                      v-for="s in daySlots"
+                      :key="s.hour"
+                      class="hour-chip"
+                      :class="{ common: isCommonSlot(date, s.hour) }"
+                    >{{ s.hour }}:00</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="legend-row">
+              <span class="hour-chip common">10:00</span> — оба свободны
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- Manual create modal -->
     <Teleport to="body">
@@ -148,6 +190,8 @@ const rows = ref([])
 const coordinators = ref([])
 const search = ref('')
 const savingRow = ref(false)
+
+const recoModal = ref({ open: false, loading: false, error: '', names: '', data: {} })
 
 const createModal = ref(false)
 const newFio = ref('')
@@ -285,6 +329,45 @@ function recoHint(row) {
   if (sameCount === 2) return 'оба свой факультет'
   if (sameCount === 1) return '1 свой + 1 другой'
   return 'другой факультет'
+}
+
+async function openRecoModal(row) {
+  const pair = pickRecommendedPair(row)
+  if (!pair) return
+  const byId = Object.fromEntries(coordinators.value.map(c => [c.id, c.name]))
+  recoModal.value = {
+    open: true,
+    loading: true,
+    error: '',
+    names: pair.map(id => shortName(byId[id])).join(' + '),
+    data: {},
+  }
+  try {
+    const { data } = await api.get('/interview/coord-availability', {
+      params: { ids: pair.join(',') },
+    })
+    recoModal.value.data = data.coordinators
+  } catch (e) {
+    recoModal.value.error = e.response?.data?.detail || 'Ошибка загрузки'
+  } finally {
+    recoModal.value.loading = false
+  }
+}
+
+function groupByDate(slots) {
+  const map = {}
+  for (const s of slots) {
+    if (!map[s.date]) map[s.date] = []
+    map[s.date].push(s)
+  }
+  return map
+}
+
+function isCommonSlot(date, hour) {
+  const coords = Object.values(recoModal.value.data)
+  return coords.length === 2 &&
+    coords[0].slots.some(s => s.date === date && s.hour === hour) &&
+    coords[1].slots.some(s => s.date === date && s.hour === hour)
 }
 
 async function createManual() {
@@ -545,6 +628,63 @@ label {
 }
 .create-msg.ok  { background: rgba(6,214,160,0.1); color: #05a87c; }
 .create-msg.err { background: rgba(230,57,70,0.08); color: #e63946; }
+
+/* Reco clickable */
+.reco-clickable { cursor: pointer; transition: filter 0.12s, transform 0.1s; }
+.reco-clickable:hover { filter: brightness(0.95); transform: translateY(-1px); }
+
+/* Reco modal */
+.reco-modal { width: 520px; max-width: 95vw; max-height: 80vh; display: flex; flex-direction: column; }
+.modal-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 1.25rem 1.5rem 1rem; border-bottom: 1px solid #eee; flex-shrink: 0;
+}
+.modal-title { font-size: 1rem; font-weight: 700; color: #1a1a2e; }
+.modal-sub { font-size: 0.82rem; color: #4361ee; font-weight: 600; margin-top: 0.2rem; }
+.modal-state { padding: 2rem; text-align: center; color: #aaa; font-size: 0.9rem; }
+.modal-state.err { color: #e63946; }
+
+.avail-content { overflow-y: auto; padding: 1rem 1.5rem 1.25rem; display: flex; flex-direction: column; gap: 1.25rem; }
+
+.coord-section { }
+.coord-name { font-weight: 700; font-size: 0.88rem; color: #1a1a2e; margin-bottom: 0.55rem; }
+.no-slots { font-size: 0.82rem; color: #aaa; font-style: italic; }
+
+.day-list { display: flex; flex-direction: column; gap: 0.45rem; }
+.day-row { display: flex; align-items: flex-start; gap: 0.75rem; }
+.day-label {
+  font-size: 0.74rem; font-weight: 600; color: #6b7280;
+  white-space: nowrap; min-width: 80px; padding-top: 0.15rem;
+  text-transform: capitalize;
+}
+.hour-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.hour-chip {
+  padding: 0.18rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  background: #f0f2f5;
+  color: #6b7280;
+  font-variant-numeric: tabular-nums;
+}
+.hour-chip.common {
+  background: rgba(6,160,122,0.15);
+  color: #058c6b;
+  border: 1px solid rgba(6,160,122,0.3);
+}
+
+.legend-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.78rem; color: #888;
+  padding-top: 0.25rem; border-top: 1px solid #f0f0f0;
+}
+
+.close-btn {
+  background: none; border: none; font-size: 1rem;
+  color: #888; cursor: pointer; padding: 0.25rem 0.5rem;
+  border-radius: 6px; transition: background 0.15s; flex-shrink: 0;
+}
+.close-btn:hover { background: #f0f2f5; color: #333; }
 
 .state-msg {
   background: white; border-radius: 12px; padding: 3rem;
