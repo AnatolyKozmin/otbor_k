@@ -283,7 +283,13 @@
                       :class="{ 'gp-slot-current': s.hour === gridPanel.hour }"
                     >
                       <span class="gp-slot-hour">{{ s.hour }}:00</span>
-                      <span class="gp-slot-cands">{{ s.candidates.map(r => shortFio(r.fio)).join(', ') }}</span>
+                      <span
+                        v-for="r in s.candidates"
+                        :key="r.row_number"
+                        class="gp-slot-cand-item"
+                      >
+                        {{ shortFio(r.fio) }}<span v-if="r.faculty" class="gp-slot-fac"> ({{ r.faculty }})</span>
+                      </span>
                     </span>
                   </div>
                 </div>
@@ -1233,5 +1239,8 @@ label {
 .gp-rev-slot.gp-slot-current { background: rgba(67,97,238,0.1); border-color: #4361ee; }
 .gp-slot-hour { font-weight: 700; color: #374151; font-variant-numeric: tabular-nums; }
 .gp-slot-cands { color: #6b7280; }
+.gp-slot-cand-item { color: #374151; }
+.gp-slot-cand-item + .gp-slot-cand-item::before { content: ', '; color: #9ca3af; }
+.gp-slot-fac { color: #9ca3af; font-size: 0.68rem; }
 .gp-schedule-empty { font-size: 0.78rem; color: #9ca3af; font-style: italic; }
 </style>
