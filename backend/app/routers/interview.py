@@ -259,13 +259,36 @@ def get_all_assignments(
 
     id_to_faculty = _build_id_to_faculty_map(db)
 
-    fio_col = _detect_col(rows, FIO_KEYWORDS)
-    sid_col = _detect_col(rows, STUDENT_ID_KEYWORDS)
+    def _row_fio(row) -> str:
+        for col, val in row.data.items():
+            if col.startswith("_"):
+                continue
+            if any(kw in col.lower() for kw in FIO_KEYWORDS):
+                v = str(val or "").strip()
+                if v and v != "—":
+                    return v
+        return ""
+
+    def _row_sid(row) -> str:
+        # Сначала ищем колонку с «студ» И «билет»
+        for col, val in row.data.items():
+            if col.startswith("_"):
+                continue
+            cl = col.lower()
+            if "студ" in cl and "билет" in cl:
+                return str(val or "").strip()
+        # Fallback — любое «билет»
+        for col, val in row.data.items():
+            if col.startswith("_"):
+                continue
+            if "билет" in col.lower():
+                return str(val or "").strip()
+        return ""
 
     result = []
     for row in rows:
         a = assignments.get(row.row_number)
-        student_id = row.data.get(sid_col, "") if sid_col else ""
+        student_id = _row_sid(row)
         norm_sid = _normalize_student_id(student_id)
         faculty = id_to_faculty.get(norm_sid, "") if norm_sid else ""
 
@@ -289,7 +312,7 @@ def get_all_assignments(
         result.append(
             {
                 "row_number": row.row_number,
-                "fio": row.data.get(fio_col, "") if fio_col else "",
+                "fio": _row_fio(row),
                 "student_id": student_id,
                 "faculty": faculty,
                 "slot_date": slot_date,
