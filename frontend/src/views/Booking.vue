@@ -42,7 +42,8 @@
               <b>назначаются координаторами</b>
             </div>
           </div>
-          <p class="hint">Если нужно перенести — свяжитесь с координатором.</p>
+          <p class="hint">Хотите перенести запись? Выберите другой слот.</p>
+          <button class="ghost-btn rebook-btn" @click="goRebook">Перенести запись →</button>
         </div>
       </div>
 
@@ -187,6 +188,11 @@ function resetForm() {
 
 function onStudentIdInput(e) {
   studentId.value = e.target.value.replace(/\D/g, '').slice(0, 6)
+}
+
+async function goRebook() {
+  step.value = 'slots'
+  await loadSlots()
 }
 
 async function lookup() {
@@ -518,6 +524,11 @@ h2 {
 }
 .rec-text   { color: #058c6b; }
 .other-text { color: #6b7280; }
+
+.rebook-btn {
+  width: 100%;
+  margin-top: 0.75rem;
+}
 
 .state-msg {
   text-align: center; padding: 2.2rem;

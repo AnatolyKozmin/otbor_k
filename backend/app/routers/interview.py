@@ -369,6 +369,31 @@ def set_assignment(
     return {"ok": True}
 
 
+@router.delete("/assignments/{row_number}")
+def delete_assignment(
+    row_number: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Удалить бронь кандидата. Синтетическую строку «Собес» удаляем полностью,
+    строку из Google Sheets — оставляем, только сбрасываем назначение."""
+    ia = db.query(InterviewAssignment).filter(
+        InterviewAssignment.row_number == row_number
+    ).first()
+    if ia:
+        db.delete(ia)
+
+    # Если строка синтетическая (создана при бронировании) — удаляем и её
+    row = db.query(SheetRow).filter(
+        SheetRow.sheet == "interview", SheetRow.row_number == row_number
+    ).first()
+    if row and row.data.get("_from_anketa_row"):
+        db.delete(row)
+
+    db.commit()
+    return {"ok": True}
+
+
 class ManualEntryPayload(BaseModel):
     fio: str
     student_id: str = ""

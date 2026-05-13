@@ -302,14 +302,6 @@ def book(payload: BookPayload, db: Session = Depends(get_db)):
 
     interview_row = _ensure_interview_row_for_booking(db, anketa_row, norm_sid)
 
-    # Проверка: уже забронирован?
-    existing = db.query(InterviewAssignment).filter(
-        InterviewAssignment.row_number == interview_row.row_number,
-        InterviewAssignment.slot_date.isnot(None),
-    ).first()
-    if existing:
-        raise HTTPException(409, "Вы уже записаны. Если хотите перенести — свяжитесь с координатором.")
-
     # Проверка: слот всё ещё свободен (достаточно свободных коордов)
     avail, bookings_count_now, busy = _slot_availability_index(db)
     coords = {u.id: u for u in db.query(User).filter(User.role == Role.coordinator).all()}
@@ -324,13 +316,15 @@ def book(payload: BookPayload, db: Session = Depends(get_db)):
     if booked_count >= capacity:
         raise HTTPException(409, "Слот только что заняли, выберите другой")
 
-    # Сохраняем бронь без назначенных проверяющих — назначит админ
+    # Создаём или обновляем бронь (перезапись разрешена — проверяющих сбрасываем)
     ia = db.query(InterviewAssignment).filter(
         InterviewAssignment.row_number == interview_row.row_number
     ).first()
     if ia:
         ia.slot_date = payload.slot_date
         ia.slot_hour = payload.slot_hour
+        ia.reviewer1_id = None
+        ia.reviewer2_id = None
         ia.booked_at = utc_naive_now()
     else:
         ia = InterviewAssignment(

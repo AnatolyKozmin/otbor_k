@@ -84,6 +84,7 @@
               </select>
             </td>
             <td class="reco-col">
+              <button class="del-btn" @click="deleteRow(row)" title="Удалить запись">✕</button>
               <div v-if="!row.slot_date" class="reco muted-empty">—</div>
               <template v-else-if="pickRecommendedPair(row)">
                 <div class="reco reco-clickable" :class="recoClass(row)" @click="openRecoModal(row)">
@@ -370,6 +371,16 @@ function isCommonSlot(date, hour) {
     coords[1].slots.some(s => s.date === date && s.hour === hour)
 }
 
+async function deleteRow(row) {
+  if (!confirm(`Удалить запись «${row.fio || '—'}»?`)) return
+  try {
+    await api.delete(`/interview/assignments/${row.row_number}`)
+    rows.value = rows.value.filter(r => r.row_number !== row.row_number)
+  } catch (e) {
+    alert(e.response?.data?.detail || 'Ошибка удаления')
+  }
+}
+
 async function createManual() {
   if (!newFio.value.trim()) return
   creating.value = true
@@ -632,6 +643,21 @@ label {
 /* Reco clickable */
 .reco-clickable { cursor: pointer; transition: filter 0.12s, transform 0.1s; }
 .reco-clickable:hover { filter: brightness(0.95); transform: translateY(-1px); }
+
+.del-btn {
+  float: right;
+  margin-left: 0.5rem;
+  background: none;
+  border: none;
+  color: #ddd;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+  line-height: 1;
+}
+.del-btn:hover { color: #e63946; background: rgba(230,57,70,0.08); }
 
 /* Reco modal */
 .reco-modal { width: 520px; max-width: 95vw; max-height: 80vh; display: flex; flex-direction: column; }
