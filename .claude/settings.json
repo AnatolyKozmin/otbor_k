@@ -3,7 +3,37 @@
     "allow": [
       "Bash(python3 -c ' *)",
       "Bash(pip3 install *)",
-      "Bash(curl -s http://localhost:8090/api/interview/form)"
+      "Bash(curl -s http://localhost:8090/api/interview/form)",
+      "Bash(lsof -nP -iTCP:8000 -sTCP:LISTEN)",
+      "Bash(lsof -nP -iTCP:5173 -sTCP:LISTEN)",
+      "Read(//Users/anatolij/.pyenv/versions/3.12.8/bin/**)",
+      "Bash(/Users/anatolij/CT/koord_hr/backend/.venv/bin/python --version)",
+      "Bash(.venv/bin/uvicorn app.main:app --reload --port 8000 --host 127.0.0.1)",
+      "Bash(npm run *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8000/health)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:5173/)",
+      "Bash(curl -s http://127.0.0.1:8000/health)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://127.0.0.1:5173/booking)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5173/booking)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:5173/)",
+      "Bash(.venv/bin/python -c ' *)",
+      "Bash(curl -s \"http://127.0.0.1:8000/api/booking/lookup?student_id=255164\")",
+      "Bash(curl -s \"http://127.0.0.1:8000/api/booking/slots?student_id=255164\")",
+      "Bash(curl -s -w \"HTTP %{http_code}\\\\n\" \"http://127.0.0.1:8000/api/booking/lookup?student_id=999999\")",
+      "Bash(curl -s \"http://127.0.0.1:8000/booking/lookup?student_id=255164\")",
+      "Bash(curl -s \"http://127.0.0.1:5173/api/booking/lookup?student_id=255164\")",
+      "Bash(curl -s \"http://127.0.0.1:5173/api/booking/slots?student_id=255164\")",
+      "Bash(curl -sv \"http://127.0.0.1:5173/api/booking/lookup?student_id=255164\")",
+      "Bash(curl -s \"http://localhost:5173/api/booking/lookup?student_id=255164\")",
+      "Bash(.venv/bin/python)",
+      "Bash(curl -s \"http://127.0.0.1:8000/booking/slots?student_id=255164\")",
+      "Bash(curl -s -X POST \"http://127.0.0.1:8000/booking/book\" -H \"Content-Type: application/json\" -d '{\"student_id\":\"255164\",\"slot_date\":\"2026-05-14\",\"slot_hour\":10}')",
+      "Bash(curl -s -w \"\\\\nHTTP %{http_code}\\\\n\" -X POST \"http://127.0.0.1:8000/booking/book\" -H \"Content-Type: application/json\" -d '{\"student_id\":\"255164\",\"slot_date\":\"2026-05-14\",\"slot_hour\":10}')",
+      "Bash(curl -s -w \"\\\\nHTTP %{http_code}\\\\n\" \"http://127.0.0.1:8000/booking/lookup?student_id=999999\")",
+      "Bash(curl -s -w \"\\\\nHTTP %{http_code}\\\\n\" \"http://127.0.0.1:8000/booking/lookup?student_id=\")",
+      "Bash(curl -s \"http://127.0.0.1:8000/health\")",
+      "Bash(openssl x509 *)",
+      "Bash(echo \"cert MD5: $\\(openssl x509 -noout -modulus -in 'certificate \\(4\\).crt')"
     ]
   }
 }

@@ -44,16 +44,19 @@ services:
       context: ./frontend
     container_name: koord-hr-frontend
     restart: unless-stopped
-    ports:
-      - "8090:80"   # ← поменяй здесь, если 8090 тоже окажется занят
+    # порт на хост не пробрасываем — снаружи приходит через edge-nginx (arkadium_shared)
     depends_on:
       - backend
     networks:
-      - koord-hr
+      - koord-hr           # для общения с backend по DNS-имени "backend"
+      - arkadium_shared    # чтобы edge-nginx видел koord-hr-frontend:80
 
 networks:
   koord-hr:
     driver: bridge
+  arkadium_shared:
+    external: true
+    name: arkadium_shared
 
 volumes:
   redis_data:

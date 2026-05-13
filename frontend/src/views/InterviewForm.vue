@@ -729,11 +729,29 @@ onUnmounted(() => {
 .sec-creative_thinking{ background: #92400e; }
 .sec-outro            { background: #374151; }
 
-.form-item { padding: 0.85rem 1.25rem; border-bottom: 1px solid #f5f5f5; }
+.form-item { padding: 0.85rem 1.25rem; border-bottom: 1px solid #f5f5f5; min-width: 0; }
 .form-item:last-child { border-bottom: none; }
-.script-text { font-size: 0.82rem; color: #888; white-space: pre-wrap; line-height: 1.55; background: #fafafa; border-radius: 6px; padding: 0.65rem 0.85rem; border-left: 3px solid #e0e0e0; }
+.script-text {
+  font-size: 0.88rem; color: #444;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.6;
+  background: #fafbfc;
+  border-radius: 8px;
+  padding: 0.85rem 1.05rem;
+  border-left: 3px solid #c0c8d4;
+  max-width: 100%;
+}
 .sub-label { font-size: 0.8rem; font-weight: 700; color: #4361ee; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.2rem 0; }
-.question-text { font-size: 0.9rem; color: #1a1a2e; font-weight: 500; margin-bottom: 0.75rem; white-space: pre-wrap; line-height: 1.5; }
+.question-text {
+  font-size: 0.95rem; color: #1a1a2e; font-weight: 500;
+  margin-bottom: 0.75rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.5;
+}
 .question-text.is-case { background: rgba(180,83,9,0.05); border-left: 3px solid #b45309; padding: 0.5rem 0.75rem; border-radius: 4px; }
 .case-badge { display: inline-block; background: #b45309; color: white; font-size: 0.65rem; font-weight: 700; padding: 0.1rem 0.4rem; border-radius: 3px; margin-right: 0.4rem; vertical-align: middle; }
 

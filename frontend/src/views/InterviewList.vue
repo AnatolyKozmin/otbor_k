@@ -14,15 +14,23 @@
         v-for="item in interviews"
         :key="item.row_number"
         class="card"
+        :class="{ scheduled: item.slot_date, unscheduled: !item.slot_date }"
         @click="openForm(item.row_number)"
       >
+        <div class="card-when">
+          <template v-if="item.slot_date">
+            <span class="when-date">{{ formatDate(item.slot_date) }}</span>
+            <span class="when-time">{{ item.slot_hour }}:00 — {{ item.slot_hour + 1 }}:00</span>
+          </template>
+          <span v-else class="when-empty">не записан кандидат</span>
+        </div>
         <div class="card-fio">{{ item.fio || '— ФИО не указано —' }}</div>
         <div class="card-meta">
           <span class="slot-badge" :class="'slot' + item.my_slot">
             Проверяющий {{ item.my_slot }}
           </span>
           <span class="other-name">
-            {{ item.my_slot === 1 ? item.reviewer2 : item.reviewer1 || '—' }}
+            с {{ (item.my_slot === 1 ? item.reviewer2 : item.reviewer1) || '—' }}
           </span>
         </div>
         <button class="open-btn">Открыть →</button>
@@ -53,6 +61,16 @@ onMounted(async () => {
 function openForm(rowNumber) {
   router.push(`/interviews/${rowNumber}`)
 }
+
+const MONTHS = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря']
+const WEEKDAYS = ['вс','пн','вт','ср','чт','пт','сб']
+
+function formatDate(iso) {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  return `${WEEKDAYS[dt.getDay()]}, ${d} ${MONTHS[m - 1]}`
+}
 </script>
 
 <style scoped>
@@ -77,6 +95,18 @@ h2 { margin: 0; font-size: 1.4rem; color: #1a1a2e; }
   gap: 0.6rem;
 }
 .card:hover { box-shadow: 0 4px 16px rgba(67,97,238,0.12); transform: translateY(-1px); }
+.card.unscheduled { opacity: 0.7; }
+
+.card-when {
+  display: flex; flex-direction: column; gap: 0.15rem;
+  padding-bottom: 0.5rem; border-bottom: 1px solid #f0f0f0;
+}
+.when-date {
+  font-weight: 700; font-size: 0.95rem; color: #4361ee;
+  text-transform: capitalize;
+}
+.when-time { font-size: 0.78rem; color: #777; font-variant-numeric: tabular-nums; }
+.when-empty { font-size: 0.8rem; color: #aaa; font-style: italic; }
 
 .card-fio { font-weight: 600; font-size: 1rem; color: #1a1a2e; }
 

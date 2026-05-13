@@ -22,10 +22,12 @@
         <thead>
           <tr>
             <th class="num-col">#</th>
-            <th>ФИО</th>
+            <th>Когда</th>
+            <th>Кандидат</th>
             <th>Студ. билет</th>
             <th>Проверяющий 1</th>
             <th>Проверяющий 2</th>
+            <th class="reco-col">Рекомендация</th>
           </tr>
         </thead>
         <tbody>
@@ -35,10 +37,21 @@
             :class="{
               'full': row.reviewer1_id && row.reviewer2_id,
               'partial': (row.reviewer1_id || row.reviewer2_id) && !(row.reviewer1_id && row.reviewer2_id),
+              'no-slot': !row.slot_date,
             }"
           >
             <td class="num-col muted">{{ row.row_number }}</td>
-            <td class="fio-cell">{{ row.fio || '—' }}</td>
+            <td class="when-cell">
+              <template v-if="row.slot_date">
+                <div class="when-date">{{ formatDate(row.slot_date) }}</div>
+                <div class="when-time">{{ row.slot_hour }}:00</div>
+              </template>
+              <span v-else class="muted">—</span>
+            </td>
+            <td class="fio-cell">
+              <div>{{ row.fio || '—' }}</div>
+              <span v-if="row.faculty" class="fac-badge">{{ row.faculty }}</span>
+            </td>
             <td class="mono muted">{{ row.student_id || '—' }}</td>
             <td>
               <select
@@ -48,11 +61,11 @@
               >
                 <option value="">— не назначен —</option>
                 <option
-                  v-for="c in coordinators"
+                  v-for="c in sortedCoords(row)"
                   :key="c.id"
                   :value="c.id"
                   :disabled="c.id === row.reviewer2_id"
-                >{{ c.name }}</option>
+                >{{ optionLabel(row, c) }}</option>
               </select>
             </td>
             <td>
@@ -63,21 +76,38 @@
               >
                 <option value="">— не назначен —</option>
                 <option
-                  v-for="c in coordinators"
+                  v-for="c in sortedCoords(row)"
                   :key="c.id"
                   :value="c.id"
                   :disabled="c.id === row.reviewer1_id"
-                >{{ c.name }}</option>
+                >{{ optionLabel(row, c) }}</option>
               </select>
+            </td>
+            <td class="reco-col">
+              <div v-if="!row.slot_date" class="reco muted-empty">—</div>
+              <template v-else-if="pickRecommendedPair(row)">
+                <div class="reco" :class="recoClass(row)">
+                  <span class="reco-icon">💡</span>
+                  <span class="reco-names">{{ recoNames(row) }}</span>
+                  <span class="reco-hint">{{ recoHint(row) }}</span>
+                </div>
+              </template>
+              <div v-else class="reco reco-none">недостаточно свободных проверяющих</div>
             </td>
           </tr>
           <tr v-if="!filteredRows.length">
-            <td colspan="5" class="muted" style="text-align:center;padding:2rem">
+            <td colspan="7" class="muted" style="text-align:center;padding:2rem">
               {{ search ? 'Ничего не найдено' : 'Нет данных. Загрузите собесы из Google Sheets.' }}
             </td>
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <div class="legend-bar">
+      <span><b>🎓</b> свой факультет кандидата</span>
+      <span><b>✓</b> доступен в этот час</span>
+      <span class="muted">(без значков — не указал занятость или уже занят другим собесом)</span>
     </div>
 
     <!-- Saving indicator -->
@@ -174,6 +204,87 @@ async function setReviewer(row, slot, value) {
   } finally {
     savingRow.value = false
   }
+}
+
+const MONTHS = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря']
+const WEEKDAYS = ['вс','пн','вт','ср','чт','пт','сб']
+
+function formatDate(iso) {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  return `${WEEKDAYS[dt.getDay()]}, ${d} ${MONTHS[m - 1]}`
+}
+
+function coordPriority(row, c) {
+  const sameFac = row.same_faculty_coord_ids?.includes(c.id)
+  const available = row.available_coord_ids?.includes(c.id)
+  if (sameFac && available) return 0
+  if (available) return 1
+  return 2
+}
+
+function sortedCoords(row) {
+  // У строк без слота — отдаём как есть (нет смысла сортировать по доступности)
+  if (!row.slot_date) return coordinators.value
+  return [...coordinators.value].sort((a, b) => {
+    const pa = coordPriority(row, a)
+    const pb = coordPriority(row, b)
+    if (pa !== pb) return pa - pb
+    return a.name.localeCompare(b.name, 'ru')
+  })
+}
+
+function optionLabel(row, c) {
+  if (!row.slot_date) return c.name
+  const sameFac = row.same_faculty_coord_ids?.includes(c.id)
+  const available = row.available_coord_ids?.includes(c.id)
+  const prefix = `${sameFac ? '🎓' : ''}${available ? '✓' : ''}`
+  return prefix ? `${prefix} ${c.name}` : c.name
+}
+
+function pickRecommendedPair(row) {
+  const sameFac = row.same_faculty_coord_ids || []
+  const avail = row.available_coord_ids || []
+  const others = avail.filter(id => !sameFac.includes(id))
+  const picked = []
+  picked.push(...sameFac.slice(0, 2))
+  if (picked.length < 2) picked.push(...others.slice(0, 2 - picked.length))
+  return picked.length === 2 ? picked : null
+}
+
+function shortName(fullName) {
+  if (!fullName) return ''
+  const parts = fullName.split(' ').filter(Boolean)
+  if (parts.length < 2) return fullName
+  return `${parts[0]} ${parts[1][0]}.`
+}
+
+function recoNames(row) {
+  const pair = pickRecommendedPair(row)
+  if (!pair) return ''
+  const byId = Object.fromEntries(coordinators.value.map(c => [c.id, c.name]))
+  return `${shortName(byId[pair[0]])} + ${shortName(byId[pair[1]])}`
+}
+
+function recoClass(row) {
+  const pair = pickRecommendedPair(row)
+  if (!pair) return ''
+  const sameFac = row.same_faculty_coord_ids || []
+  const sameCount = pair.filter(id => sameFac.includes(id)).length
+  if (sameCount === 2) return 'reco-strong'
+  if (sameCount === 1) return 'reco-mixed'
+  return 'reco-weak'
+}
+
+function recoHint(row) {
+  const pair = pickRecommendedPair(row)
+  if (!pair) return ''
+  const sameFac = row.same_faculty_coord_ids || []
+  const sameCount = pair.filter(id => sameFac.includes(id)).length
+  if (sameCount === 2) return 'оба свой факультет'
+  if (sameCount === 1) return '1 свой + 1 другой'
+  return 'другой факультет'
 }
 
 async function createManual() {
@@ -283,6 +394,55 @@ tr.partial td { background: rgba(255,190,11,0.04); }
 .muted { color: #bbb; }
 .fio-cell { font-weight: 500; }
 .mono { font-family: monospace; font-size: 0.82rem; }
+
+.when-cell { white-space: nowrap; }
+.when-date {
+  font-size: 0.82rem; font-weight: 600; color: #1a1a2e;
+  text-transform: capitalize;
+}
+.when-time { font-size: 0.78rem; color: #888; font-variant-numeric: tabular-nums; }
+
+tr.no-slot td { opacity: 0.7; }
+
+.fac-badge {
+  display: inline-block;
+  margin-top: 0.15rem;
+  padding: 0.05rem 0.45rem;
+  background: rgba(67,97,238,0.1);
+  color: #4361ee;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.legend-bar {
+  margin-top: 0.85rem;
+  font-size: 0.78rem;
+  color: #777;
+  display: flex; flex-wrap: wrap; gap: 1rem;
+  padding: 0.5rem 0.85rem;
+}
+.legend-bar b { color: #1a1a2e; }
+.legend-bar .muted { font-style: italic; }
+
+.reco-col { min-width: 200px; }
+.reco {
+  display: inline-flex; flex-direction: column;
+  padding: 0.35rem 0.65rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  max-width: 240px;
+}
+.reco-icon { margin-right: 0.25rem; }
+.reco-names { font-weight: 600; }
+.reco-hint { font-size: 0.7rem; opacity: 0.8; margin-top: 0.1rem; }
+
+.reco.reco-strong { background: rgba(6,160,122,0.1);  color: #058c6b; }
+.reco.reco-mixed  { background: rgba(67,97,238,0.08); color: #4361ee; }
+.reco.reco-weak   { background: rgba(255,190,11,0.12); color: #b08000; }
+.reco.reco-none   { background: #f5f5f5; color: #aaa; font-style: italic; }
+.reco.muted-empty { background: transparent; color: #ccc; }
 
 .rev-select {
   width: 100%;

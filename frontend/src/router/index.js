@@ -8,6 +8,11 @@ const routes = [
     meta: { guest: true },
   },
   {
+    path: '/booking',
+    component: () => import('../views/Booking.vue'),
+    meta: { public: true },
+  },
+  {
     path: '/',
     component: () => import('../views/Dashboard.vue'),
     meta: { requiresAuth: true },
@@ -71,6 +76,7 @@ const router = createRouter({
 })
 
 router.beforeEach((to, _, next) => {
+  if (to.meta.public) return next()
   const auth = useAuthStore()
   if (to.meta.requiresAuth && !auth.isAuthenticated) return next('/login')
   if (to.meta.requiresAdmin && !auth.isAdmin) return next('/')

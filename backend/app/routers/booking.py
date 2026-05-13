@@ -97,7 +97,10 @@ def _booking_row_number_display(db: Session, norm_sid: str, anketa_row: SheetRow
 
 
 def _already_booking_payload(db: Session, norm_sid: str) -> Optional[dict]:
-    """Есть ли активная бронь по билету (через строку «Собес» с тем же билетом)."""
+    """Есть ли активная бронь по билету (через строку «Собес» с тем же билетом).
+
+    Проверяющие могут быть ещё не назначены — это нормально (админ сделает позже).
+    """
     int_row = _find_interview_row_by_ticket(db, norm_sid)
     if not int_row:
         return None
@@ -111,13 +114,14 @@ def _already_booking_payload(db: Session, norm_sid: str) -> Optional[dict]:
     )
     if not existing:
         return None
-    r1 = db.query(User).filter(User.id == existing.reviewer1_id).first()
-    r2 = db.query(User).filter(User.id == existing.reviewer2_id).first()
+    r1 = db.query(User).filter(User.id == existing.reviewer1_id).first() if existing.reviewer1_id else None
+    r2 = db.query(User).filter(User.id == existing.reviewer2_id).first() if existing.reviewer2_id else None
     return {
         "slot_date": existing.slot_date,
         "slot_hour": existing.slot_hour,
         "reviewer1": r1.name if r1 else None,
         "reviewer2": r2.name if r2 else None,
+        "reviewers_pending": not (r1 and r2),
     }
 
 
@@ -267,14 +271,21 @@ def slots(student_id: str = Query(...), db: Session = Depends(get_db)):
 
     result.sort(key=lambda s: (s["date"], s["hour"]))
 
-    # Группировка по дате для удобства фронта
-    by_date: dict[str, list] = defaultdict(list)
+    # Две секции: рекомендованные (пара 2 коорда с факультетом кандидата) и остальные
+    rec_by_date: dict[str, list] = defaultdict(list)
+    other_by_date: dict[str, list] = defaultdict(list)
     for s in result:
-        by_date[s["date"]].append(s)
+        bucket = rec_by_date if s["type"] == "recommended" else other_by_date
+        bucket[s["date"]].append(s)
 
     return {
         "candidate_faculty": candidate_faculty,
-        "dates": [{"date": d, "slots": by_date[d]} for d in sorted(by_date.keys())],
+        "recommended": {
+            "dates": [{"date": d, "slots": rec_by_date[d]} for d in sorted(rec_by_date.keys())],
+        },
+        "other": {
+            "dates": [{"date": d, "slots": other_by_date[d]} for d in sorted(other_by_date.keys())],
+        },
     }
 
 
@@ -286,7 +297,7 @@ class BookPayload(BaseModel):
 
 @router.post("/book")
 def book(payload: BookPayload, db: Session = Depends(get_db)):
-    """Шаг 3: бронируем слот, авто-выбирая 2 проверяющих."""
+    """Шаг 3: бронируем слот (дата+время). Проверяющих назначает админ позже."""
     norm_sid = _normalize_student_id(payload.student_id)
     if not norm_sid:
         raise HTTPException(400, "Некорректный билет")
@@ -296,7 +307,6 @@ def book(payload: BookPayload, db: Session = Depends(get_db)):
         raise HTTPException(404, "Нет такого билета среди загруженных анкет")
 
     interview_row = _ensure_interview_row_for_booking(db, anketa_row, norm_sid)
-    candidate_faculty = _candidate_faculty(db, anketa_row, norm_sid)
 
     # Проверка: уже забронирован?
     existing = db.query(InterviewAssignment).filter(
@@ -306,7 +316,7 @@ def book(payload: BookPayload, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(409, "Вы уже записаны. Если хотите перенести — свяжитесь с координатором.")
 
-    # Проверка: слот всё ещё свободен
+    # Проверка: слот всё ещё свободен по ёмкости
     cap_row = db.query(SlotCapacity).filter(
         SlotCapacity.slot_date == payload.slot_date,
         SlotCapacity.slot_hour == payload.slot_hour,
@@ -321,43 +331,27 @@ def book(payload: BookPayload, db: Session = Depends(get_db)):
     if booked_count >= cap_row.capacity:
         raise HTTPException(409, "Слот только что заняли, выберите другой")
 
-    # Доступные проверяющие в этот слот
+    # Проверка: в этот слот есть хотя бы 2 потенциальных проверяющих
+    # (чтобы кандидат не записался на час, в который физически некому проводить)
     avail, _, busy, _ = _slot_availability_index(db)
     coords = {u.id: u for u in db.query(User).filter(User.role == Role.coordinator).all()}
     slot_avail = avail.get((payload.slot_date, payload.slot_hour), set())
     slot_busy = busy.get((payload.slot_date, payload.slot_hour), set())
     free_ids = [uid for uid in slot_avail if uid not in slot_busy and uid in coords]
-
     if len(free_ids) < 2:
         raise HTTPException(409, "В этом слоте не осталось двух свободных проверяющих")
 
-    # Приоритет — факультет кандидата
-    same_fac = [uid for uid in free_ids if candidate_faculty and candidate_faculty in (coords[uid].faculties or [])]
-    other = [uid for uid in free_ids if uid not in same_fac]
-
-    picked: list[int] = []
-    picked.extend(same_fac[:2])
-    if len(picked) < 2:
-        picked.extend(other[: 2 - len(picked)])
-
-    if len(picked) < 2:
-        raise HTTPException(409, "Не удалось подобрать двух проверяющих")
-
-    # Сохраняем — обновляем существующий assignment или создаём новый
+    # Сохраняем бронь без назначенных проверяющих — назначит админ
     ia = db.query(InterviewAssignment).filter(
         InterviewAssignment.row_number == interview_row.row_number
     ).first()
     if ia:
-        ia.reviewer1_id = picked[0]
-        ia.reviewer2_id = picked[1]
         ia.slot_date = payload.slot_date
         ia.slot_hour = payload.slot_hour
         ia.booked_at = utc_naive_now()
     else:
         ia = InterviewAssignment(
             row_number=interview_row.row_number,
-            reviewer1_id=picked[0],
-            reviewer2_id=picked[1],
             slot_date=payload.slot_date,
             slot_hour=payload.slot_hour,
             booked_at=utc_naive_now(),
@@ -367,12 +361,9 @@ def book(payload: BookPayload, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(ia)
 
-    r1 = coords[picked[0]]
-    r2 = coords[picked[1]]
     return {
         "ok": True,
         "slot_date": ia.slot_date,
         "slot_hour": ia.slot_hour,
-        "reviewer1": r1.name,
-        "reviewer2": r2.name,
+        "reviewers_pending": True,
     }

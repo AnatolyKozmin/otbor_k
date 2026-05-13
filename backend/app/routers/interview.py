@@ -143,8 +143,13 @@ def get_my_interviews(
                 "reviewer1": users_map.get(a.reviewer1_id) if a.reviewer1_id else None,
                 "reviewer2": users_map.get(a.reviewer2_id) if a.reviewer2_id else None,
                 "my_slot": my_slot,
+                "slot_date": a.slot_date,
+                "slot_hour": a.slot_hour,
             }
         )
+
+    # Запланированные (с датой) — по возрастанию даты/часа; без даты — в конце
+    result.sort(key=lambda x: (x["slot_date"] is None, x["slot_date"] or "", x["slot_hour"] or 0))
 
     return {"interviews": result}
 
@@ -154,7 +159,20 @@ def get_all_assignments(
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):
-    """Админ: все строки собесов с назначенными проверяющими."""
+    """Админ: строки собесов + слоты брони + подсказки по доступности проверяющих.
+
+    Для каждой брони со слотом отдаём:
+      slot_date, slot_hour, faculty (кандидата),
+      available_coord_ids — у кого Availability на этот час и кто не занят другой бронью,
+      same_faculty_coord_ids — у кого среди available факультет совпадает с кандидатом.
+    """
+    # Lazy import во избежание циклов
+    from app.routers.admin_ops import (
+        _build_id_to_faculty_map,
+        _normalize_student_id,
+    )
+    from app.models import Availability
+
     rows = (
         db.query(SheetRow)
         .filter(SheetRow.sheet == "interview")
@@ -165,6 +183,27 @@ def get_all_assignments(
         a.row_number: a for a in db.query(InterviewAssignment).all()
     }
     users_map = {u.id: u.name for u in db.query(User).all()}
+    coords = (
+        db.query(User).filter(User.role == Role.coordinator).order_by(User.name).all()
+    )
+    coords_by_id = {u.id: u for u in coords}
+
+    # avail: (date, hour) → set(user_id)
+    avail_by_slot: dict[tuple[str, int], set[int]] = {}
+    for a in db.query(Availability).all():
+        avail_by_slot.setdefault((a.slot_date, a.slot_hour), set()).add(a.user_id)
+
+    # busy: координатор уже стоит на другую бронь в этот час
+    busy_by_slot: dict[tuple[str, int], set[int]] = {}
+    for ia in db.query(InterviewAssignment).filter(
+        InterviewAssignment.slot_date.isnot(None)
+    ).all():
+        key = (ia.slot_date, ia.slot_hour)
+        for rid in (ia.reviewer1_id, ia.reviewer2_id):
+            if rid:
+                busy_by_slot.setdefault(key, set()).add(rid)
+
+    id_to_faculty = _build_id_to_faculty_map(db)
 
     fio_col = _detect_col(rows, FIO_KEYWORDS)
     sid_col = _detect_col(rows, STUDENT_ID_KEYWORDS)
@@ -172,24 +211,53 @@ def get_all_assignments(
     result = []
     for row in rows:
         a = assignments.get(row.row_number)
+        student_id = row.data.get(sid_col, "") if sid_col else ""
+        norm_sid = _normalize_student_id(student_id)
+        faculty = id_to_faculty.get(norm_sid, "") if norm_sid else ""
+
+        slot_date = a.slot_date if a else None
+        slot_hour = a.slot_hour if a else None
+        available_ids: list[int] = []
+        same_faculty_ids: list[int] = []
+        if slot_date is not None and slot_hour is not None:
+            key = (slot_date, slot_hour)
+            slot_avail = avail_by_slot.get(key, set())
+            slot_busy = busy_by_slot.get(key, set())
+            # У занятых исключаем самих себя из «занятого» — они уже стоят на этот же row
+            current_pair = {a.reviewer1_id, a.reviewer2_id} - {None}
+            slot_busy = slot_busy - current_pair
+            for uid in slot_avail:
+                if uid in coords_by_id and uid not in slot_busy:
+                    available_ids.append(uid)
+                    if faculty and faculty in (coords_by_id[uid].faculties or []):
+                        same_faculty_ids.append(uid)
+
         result.append(
             {
                 "row_number": row.row_number,
                 "fio": row.data.get(fio_col, "") if fio_col else "",
-                "student_id": row.data.get(sid_col, "") if sid_col else "",
+                "student_id": student_id,
+                "faculty": faculty,
+                "slot_date": slot_date,
+                "slot_hour": slot_hour,
                 "reviewer1_id": a.reviewer1_id if a else None,
                 "reviewer2_id": a.reviewer2_id if a else None,
                 "reviewer1": users_map.get(a.reviewer1_id) if a and a.reviewer1_id else None,
                 "reviewer2": users_map.get(a.reviewer2_id) if a and a.reviewer2_id else None,
+                "available_coord_ids": available_ids,
+                "same_faculty_coord_ids": same_faculty_ids,
             }
         )
 
-    # Coordinators dropdown list
-    coordinators = [
-        {"id": u.id, "name": u.name}
-        for u in db.query(User).filter(User.role == Role.coordinator).order_by(User.name).all()
-    ]
+    # Сортировка: сначала записанные (по дате/часу), потом без слота
+    result.sort(key=lambda r: (
+        r["slot_date"] is None,
+        r["slot_date"] or "",
+        r["slot_hour"] if r["slot_hour"] is not None else 0,
+        r["row_number"],
+    ))
 
+    coordinators = [{"id": u.id, "name": u.name} for u in coords]
     return {"rows": result, "total": len(result), "coordinators": coordinators}
 
 

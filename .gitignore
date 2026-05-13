@@ -1,6 +1,10 @@
 # Secrets — никогда не коммитить
 backend/.env
 backend/credentials.json
+certs/
+*.crt
+*.key
+*.pem
 
 # Python
 __pycache__/
