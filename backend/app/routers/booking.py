@@ -26,7 +26,6 @@ from app.models import (
     InterviewAssignment,
     Role,
     SheetRow,
-    SlotCapacity,
     User,
     utc_naive_now,
 )
@@ -158,13 +157,12 @@ def _ensure_interview_row_for_booking(db: Session, anketa_row: SheetRow, norm_si
 
 
 def _slot_availability_index(db: Session):
-    """Строит индексы: что у нас по доступности и бронированиям.
+    """Строит индексы доступности и бронирований.
 
     Возвращает:
-        - avail_by_slot: (date, hour) → set(user_id) — кто может в этот час
-        - bookings_count_by_slot: (date, hour) → int — сколько собесов уже в час
-        - busy_users_by_slot: (date, hour) → set(user_id) — кто уже занят
-        - capacities: {(date, hour): capacity}
+        - avail_by_slot: (date, hour) → set(user_id)
+        - bookings_count_by_slot: (date, hour) → int
+        - busy_users_by_slot: (date, hour) → set(user_id)
     """
     avail_by_slot: dict[tuple[str, int], set[int]] = defaultdict(set)
     for a in db.query(Availability).all():
@@ -183,12 +181,7 @@ def _slot_availability_index(db: Session):
         if b.reviewer2_id:
             busy_users_by_slot[key].add(b.reviewer2_id)
 
-    capacities = {
-        (c.slot_date, c.slot_hour): c.capacity
-        for c in db.query(SlotCapacity).all()
-    }
-
-    return avail_by_slot, bookings_count_by_slot, busy_users_by_slot, capacities
+    return avail_by_slot, bookings_count_by_slot, busy_users_by_slot
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +228,7 @@ def slots(student_id: str = Query(...), db: Session = Depends(get_db)):
 
     candidate_faculty = _candidate_faculty(db, anketa_row, norm_sid)
 
-    avail, bookings_count, busy, capacities = _slot_availability_index(db)
+    avail, bookings_count, busy = _slot_availability_index(db)
 
     # Активные координаторы
     coords = {
@@ -245,17 +238,18 @@ def slots(student_id: str = Query(...), db: Session = Depends(get_db)):
     result = []
     today = datetime.now().strftime("%Y-%m-%d")
 
-    for (date, hour), cap in capacities.items():
-        if cap <= 0 or date < today:
-            continue
-        if bookings_count.get((date, hour), 0) >= cap:
+    for (date, hour), slot_avail in avail.items():
+        if date < today:
             continue
 
-        # Доступные коорды на этот слот
-        slot_avail = avail.get((date, hour), set())
         slot_busy = busy.get((date, hour), set())
         free_ids = [uid for uid in slot_avail if uid not in slot_busy and uid in coords]
         if len(free_ids) < 2:
+            continue
+
+        # Ёмкость = количество пар из свободных коордов
+        capacity = len(free_ids) // 2
+        if bookings_count.get((date, hour), 0) >= capacity:
             continue
 
         same_fac = [uid for uid in free_ids if candidate_faculty and candidate_faculty in (coords[uid].faculties or [])]
@@ -266,7 +260,7 @@ def slots(student_id: str = Query(...), db: Session = Depends(get_db)):
             "hour": hour,
             "type": slot_type,
             "free_count": len(free_ids),
-            "free_capacity": cap - bookings_count.get((date, hour), 0),
+            "free_capacity": capacity - bookings_count.get((date, hour), 0),
         })
 
     result.sort(key=lambda s: (s["date"], s["hour"]))
@@ -316,30 +310,19 @@ def book(payload: BookPayload, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(409, "Вы уже записаны. Если хотите перенести — свяжитесь с координатором.")
 
-    # Проверка: слот всё ещё свободен по ёмкости
-    cap_row = db.query(SlotCapacity).filter(
-        SlotCapacity.slot_date == payload.slot_date,
-        SlotCapacity.slot_hour == payload.slot_hour,
-    ).first()
-    if not cap_row or cap_row.capacity <= 0:
-        raise HTTPException(400, "Слот недоступен")
-
-    booked_count = db.query(InterviewAssignment).filter(
-        InterviewAssignment.slot_date == payload.slot_date,
-        InterviewAssignment.slot_hour == payload.slot_hour,
-    ).count()
-    if booked_count >= cap_row.capacity:
-        raise HTTPException(409, "Слот только что заняли, выберите другой")
-
-    # Проверка: в этот слот есть хотя бы 2 потенциальных проверяющих
-    # (чтобы кандидат не записался на час, в который физически некому проводить)
-    avail, _, busy, _ = _slot_availability_index(db)
+    # Проверка: слот всё ещё свободен (достаточно свободных коордов)
+    avail, bookings_count_now, busy = _slot_availability_index(db)
     coords = {u.id: u for u in db.query(User).filter(User.role == Role.coordinator).all()}
     slot_avail = avail.get((payload.slot_date, payload.slot_hour), set())
     slot_busy = busy.get((payload.slot_date, payload.slot_hour), set())
     free_ids = [uid for uid in slot_avail if uid not in slot_busy and uid in coords]
     if len(free_ids) < 2:
         raise HTTPException(409, "В этом слоте не осталось двух свободных проверяющих")
+
+    capacity = len(free_ids) // 2
+    booked_count = bookings_count_now.get((payload.slot_date, payload.slot_hour), 0)
+    if booked_count >= capacity:
+        raise HTTPException(409, "Слот только что заняли, выберите другой")
 
     # Сохраняем бронь без назначенных проверяющих — назначит админ
     ia = db.query(InterviewAssignment).filter(
