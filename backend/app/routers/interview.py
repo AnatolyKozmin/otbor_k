@@ -296,15 +296,18 @@ def get_all_assignments(
         slot_hour = a.slot_hour if a else None
         available_ids: list[int] = []
         same_faculty_ids: list[int] = []
+        busy_same_slot_ids: list[int] = []
         if slot_date is not None and slot_hour is not None:
             key = (slot_date, slot_hour)
             slot_avail = avail_by_slot.get(key, set())
             slot_busy = busy_by_slot.get(key, set())
-            # У занятых исключаем самих себя из «занятого» — они уже стоят на этот же row
             current_pair = {a.reviewer1_id, a.reviewer2_id} - {None}
-            slot_busy = slot_busy - current_pair
+            slot_busy_others = slot_busy - current_pair
+            for uid in coords_by_id:
+                if uid in slot_busy_others:
+                    busy_same_slot_ids.append(uid)
             for uid in slot_avail:
-                if uid in coords_by_id and uid not in slot_busy:
+                if uid in coords_by_id and uid not in slot_busy_others:
                     available_ids.append(uid)
                     if faculty and faculty in (coords_by_id[uid].faculties or []):
                         same_faculty_ids.append(uid)
@@ -323,6 +326,7 @@ def get_all_assignments(
                 "reviewer2": users_map.get(a.reviewer2_id) if a and a.reviewer2_id else None,
                 "available_coord_ids": available_ids,
                 "same_faculty_coord_ids": same_faculty_ids,
+                "busy_same_slot_ids": busy_same_slot_ids,
             }
         )
 

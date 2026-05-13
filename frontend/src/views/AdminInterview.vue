@@ -10,12 +10,66 @@
         <span v-if="notAssigned" class="muted">· Без проверяющих: <b>{{ notAssigned }}</b></span>
       </div>
       <div class="top-actions">
+        <div class="tab-switcher">
+          <button :class="['tab-btn', { active: viewMode === 'table' }]" @click="viewMode = 'table'">Таблица</button>
+          <button :class="['tab-btn', { active: viewMode === 'slots' }]" @click="viewMode = 'slots'">По слотам</button>
+        </div>
         <input v-model="search" class="search-input" placeholder="Поиск по ФИО…" />
         <button class="btn-create" @click="createModal = true">+ Создать вручную</button>
       </div>
     </div>
 
     <div v-if="loading" class="state-msg">Загрузка…</div>
+
+    <!-- Вид: по слотам -->
+    <div v-else-if="viewMode === 'slots'" class="slots-view">
+      <div v-if="!slotsGrouped.length" class="state-msg muted">Нет записанных кандидатов.</div>
+      <div v-for="slot in slotsGrouped" :key="slot.key" class="slot-group">
+        <div class="slot-group-header">
+          <span class="slot-date">{{ formatDate(slot.date) }}</span>
+          <span class="slot-time">{{ slot.hour }}:00 — {{ slot.hour + 1 }}:00</span>
+          <span class="slot-count">{{ slot.rows.length }} кандидат{{ slot.rows.length === 1 ? '' : slot.rows.length < 5 ? 'а' : 'ов' }}</span>
+        </div>
+        <div class="slot-cards">
+          <div v-for="row in slot.rows" :key="row.row_number" class="slot-card" :class="{ 'card-full': row.reviewer1_id && row.reviewer2_id }">
+            <div class="slot-card-top">
+              <div class="slot-card-fio">{{ row.fio || '—' }}</div>
+              <span v-if="row.faculty" class="fac-badge">{{ row.faculty }}</span>
+              <span class="slot-card-sid muted">{{ row.student_id || '' }}</span>
+            </div>
+            <div class="slot-card-reviewers">
+              <div class="rev-row">
+                <span class="rev-num">1</span>
+                <select class="rev-select" :value="row.reviewer1_id || ''" @change="setReviewer(row, 1, $event.target.value)">
+                  <option value="">— не назначен —</option>
+                  <option
+                    v-for="c in sortedCoords(row)"
+                    :key="c.id"
+                    :value="c.id"
+                    :disabled="c.id === row.reviewer2_id || row.busy_same_slot_ids?.includes(c.id)"
+                  >{{ optionLabel(row, c) }}</option>
+                </select>
+              </div>
+              <div class="rev-row">
+                <span class="rev-num">2</span>
+                <select class="rev-select" :value="row.reviewer2_id || ''" @change="setReviewer(row, 2, $event.target.value)">
+                  <option value="">— не назначен —</option>
+                  <option
+                    v-for="c in sortedCoords(row)"
+                    :key="c.id"
+                    :value="c.id"
+                    :disabled="c.id === row.reviewer1_id || row.busy_same_slot_ids?.includes(c.id)"
+                  >{{ optionLabel(row, c) }}</option>
+                </select>
+              </div>
+            </div>
+            <div v-if="pickRecommendedPair(row)" class="slot-reco" :class="recoClass(row)" @click="openRecoModal(row)">
+              💡 {{ recoNames(row) }} · {{ recoHint(row) }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div v-else class="table-wrap">
       <table>
@@ -67,7 +121,7 @@
                   v-for="c in sortedCoords(row)"
                   :key="c.id"
                   :value="c.id"
-                  :disabled="c.id === row.reviewer2_id"
+                  :disabled="c.id === row.reviewer2_id || row.busy_same_slot_ids?.includes(c.id)"
                 >{{ optionLabel(row, c) }}</option>
               </select>
             </td>
@@ -82,7 +136,7 @@
                   v-for="c in sortedCoords(row)"
                   :key="c.id"
                   :value="c.id"
-                  :disabled="c.id === row.reviewer1_id"
+                  :disabled="c.id === row.reviewer1_id || row.busy_same_slot_ids?.includes(c.id)"
                 >{{ optionLabel(row, c) }}</option>
               </select>
             </td>
@@ -230,6 +284,20 @@ const rows = ref([])
 const coordinators = ref([])
 const search = ref('')
 const savingRow = ref(false)
+const viewMode = ref('table')
+
+const slotsGrouped = computed(() => {
+  const booked = rows.value.filter(r => r.slot_date)
+  const q = search.value.trim().toLowerCase()
+  const filtered = q ? booked.filter(r => r.fio?.toLowerCase().includes(q)) : booked
+  const map = {}
+  for (const r of filtered) {
+    const key = `${r.slot_date}__${r.slot_hour}`
+    if (!map[key]) map[key] = { key, date: r.slot_date, hour: r.slot_hour, rows: [] }
+    map[key].rows.push(r)
+  }
+  return Object.values(map).sort((a, b) => a.date === b.date ? a.hour - b.hour : a.date.localeCompare(b.date))
+})
 
 const recoModal = ref({ open: false, loading: false, error: '', names: '', data: {} })
 const editModal = ref({ open: false, loading: false, error: '', saveError: '', saving: false, rowNumber: null, fio: '', fields: {} })
@@ -817,4 +885,34 @@ label {
   text-align: center; font-size: 0.9rem; color: #aaa;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
+
+/* Tab switcher */
+.tab-switcher { display: flex; gap: 0; border: 1.5px solid #e0e0e0; border-radius: 8px; overflow: hidden; }
+.tab-btn { padding: 0.4rem 0.9rem; background: white; border: none; font-size: 0.82rem; font-weight: 600; color: #777; cursor: pointer; transition: background 0.12s, color 0.12s; }
+.tab-btn:first-child { border-right: 1.5px solid #e0e0e0; }
+.tab-btn.active { background: #4361ee; color: white; }
+.tab-btn:hover:not(.active) { background: #f5f6fa; color: #4361ee; }
+
+/* Slot view */
+.slots-view { display: flex; flex-direction: column; gap: 1.25rem; }
+.slot-group { background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); overflow: hidden; }
+.slot-group-header { display: flex; align-items: center; gap: 0.75rem; padding: 0.7rem 1.2rem; background: linear-gradient(90deg, #4361ee08, transparent); border-bottom: 1.5px solid #f0f0f0; }
+.slot-date { font-weight: 700; font-size: 0.92rem; color: #1a1a2e; text-transform: capitalize; }
+.slot-time { font-size: 0.82rem; color: #4361ee; font-weight: 600; font-variant-numeric: tabular-nums; }
+.slot-count { margin-left: auto; font-size: 0.75rem; color: #9ca3af; }
+.slot-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0; }
+.slot-card { padding: 0.9rem 1.2rem; border-right: 1px solid #f5f5f5; border-bottom: 1px solid #f5f5f5; transition: background 0.12s; }
+.slot-card:hover { background: #fafbff; }
+.slot-card.card-full { background: rgba(6,214,160,0.02); }
+.slot-card-top { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
+.slot-card-fio { font-weight: 600; font-size: 0.9rem; color: #1a1a2e; }
+.slot-card-sid { font-size: 0.75rem; font-family: monospace; margin-left: auto; }
+.slot-card-reviewers { display: flex; flex-direction: column; gap: 0.35rem; }
+.rev-row { display: flex; align-items: center; gap: 0.4rem; }
+.rev-num { width: 18px; height: 18px; border-radius: 50%; background: #e8eaf0; color: #6b7280; font-size: 0.68rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.slot-reco { margin-top: 0.5rem; padding: 0.25rem 0.6rem; border-radius: 6px; font-size: 0.72rem; cursor: pointer; transition: filter 0.12s; }
+.slot-reco:hover { filter: brightness(0.95); }
+.slot-reco.reco-strong { background: rgba(6,160,122,0.1); color: #058c6b; }
+.slot-reco.reco-mixed  { background: rgba(67,97,238,0.08); color: #4361ee; }
+.slot-reco.reco-weak   { background: rgba(255,190,11,0.12); color: #b08000; }
 </style>
