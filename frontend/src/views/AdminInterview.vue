@@ -19,6 +19,19 @@
       </div>
     </div>
 
+    <div v-if="!loading && faculties.length > 2" class="faculty-tabs">
+      <button
+        v-for="f in faculties"
+        :key="f"
+        class="fac-tab"
+        :class="{ active: activeFaculty === f }"
+        @click="activeFaculty = f"
+      >
+        {{ f }}
+        <span class="fac-tab-count">{{ f === 'Все' ? rows.length : rows.filter(r => r.faculty === f).length }}</span>
+      </button>
+    </div>
+
     <div v-if="loading" class="state-msg">Загрузка…</div>
 
     <!-- Вид: по слотам -->
@@ -285,9 +298,27 @@ const coordinators = ref([])
 const search = ref('')
 const savingRow = ref(false)
 const viewMode = ref('table')
+const activeFaculty = ref('Все')
+
+const faculties = computed(() => {
+  const set = new Set()
+  for (const r of rows.value) if (r.faculty) set.add(r.faculty)
+  return ['Все', ...Array.from(set).sort()]
+})
+
+const rowsByFaculty = computed(() => {
+  if (activeFaculty.value === 'Все') return rows.value
+  return rows.value.filter(r => r.faculty === activeFaculty.value)
+})
+
+const filteredRows = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return rowsByFaculty.value
+  return rowsByFaculty.value.filter(r => r.fio?.toLowerCase().includes(q))
+})
 
 const slotsGrouped = computed(() => {
-  const booked = rows.value.filter(r => r.slot_date)
+  const booked = rowsByFaculty.value.filter(r => r.slot_date)
   const q = search.value.trim().toLowerCase()
   const filtered = q ? booked.filter(r => r.fio?.toLowerCase().includes(q)) : booked
   const map = {}
@@ -307,12 +338,6 @@ const newFio = ref('')
 const newStudentId = ref('')
 const creating = ref(false)
 const createMsg = ref(null)
-
-const filteredRows = computed(() => {
-  const q = search.value.trim().toLowerCase()
-  if (!q) return rows.value
-  return rows.value.filter(r => r.fio?.toLowerCase().includes(q))
-})
 
 const fullyAssigned = computed(
   () => rows.value.filter(r => r.reviewer1_id && r.reviewer2_id).length
@@ -885,6 +910,28 @@ label {
   text-align: center; font-size: 0.9rem; color: #aaa;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
+
+/* Faculty tabs */
+.faculty-tabs {
+  display: flex; flex-wrap: wrap; gap: 0.35rem;
+  margin-bottom: 0.85rem;
+}
+.fac-tab {
+  display: flex; align-items: center; gap: 0.35rem;
+  padding: 0.35rem 0.85rem;
+  border: 1.5px solid #e0e0e0; border-radius: 999px;
+  background: white; font-size: 0.8rem; font-weight: 600;
+  color: #6b7280; cursor: pointer;
+  transition: all 0.12s;
+}
+.fac-tab:hover { border-color: #4361ee; color: #4361ee; }
+.fac-tab.active { background: #4361ee; border-color: #4361ee; color: white; }
+.fac-tab-count {
+  font-size: 0.7rem; font-weight: 700;
+  background: rgba(0,0,0,0.1); border-radius: 999px;
+  padding: 0.05rem 0.4rem;
+}
+.fac-tab.active .fac-tab-count { background: rgba(255,255,255,0.25); }
 
 /* Tab switcher */
 .tab-switcher { display: flex; gap: 0; border: 1.5px solid #e0e0e0; border-radius: 8px; overflow: hidden; }
