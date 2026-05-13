@@ -236,10 +236,12 @@ def slots(student_id: str = Query(...), db: Session = Depends(get_db)):
     }
 
     result = []
-    today = datetime.now().strftime("%Y-%m-%d")
+    now = datetime.now()
 
     for (date, hour), slot_avail in avail.items():
-        if date < today:
+        # Запись закрывается за 12 часов до начала слота
+        slot_start = datetime.strptime(f"{date} {hour}:00", "%Y-%m-%d %H:%M")
+        if (slot_start - now).total_seconds() < 12 * 3600:
             continue
 
         slot_busy = busy.get((date, hour), set())
@@ -301,6 +303,11 @@ def book(payload: BookPayload, db: Session = Depends(get_db)):
         raise HTTPException(404, "Нет такого билета среди загруженных анкет")
 
     interview_row = _ensure_interview_row_for_booking(db, anketa_row, norm_sid)
+
+    # Проверка: до слота >= 12 часов
+    slot_start = datetime.strptime(f"{payload.slot_date} {payload.slot_hour}:00", "%Y-%m-%d %H:%M")
+    if (slot_start - datetime.now()).total_seconds() < 12 * 3600:
+        raise HTTPException(400, "Запись на этот слот закрыта (менее 12 часов до начала)")
 
     # Проверка: слот всё ещё свободен (достаточно свободных коордов)
     avail, bookings_count_now, busy = _slot_availability_index(db)

@@ -16,7 +16,7 @@ from app.database import get_db
 from app.models import Availability, SlotCapacity, User, Role
 
 # Жёстко зашитые рамки периода — нет смысла принимать их с клиента.
-ALLOWED_DATES = {f"2026-05-{d:02d}" for d in range(9, 24)}  # 9..23
+ALLOWED_DATES = {f"2026-05-{d:02d}" for d in range(9, 25)}  # 9..24
 ALLOWED_HOURS = set(range(9, 22))                            # 9..21
 
 router = APIRouter(prefix="/availability", tags=["availability"])

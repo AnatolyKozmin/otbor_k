@@ -129,7 +129,7 @@ import api from '../api'
 const HOURS = Array.from({ length: 13 }, (_, i) => 9 + i)
 const DOW_RU = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
 
-const DATES = Array.from({ length: 15 }, (_, i) => {
+const DATES = Array.from({ length: 16 }, (_, i) => {
   const day = 9 + i
   const d = new Date(Date.UTC(2026, 4, day))
   const dow = DOW_RU[d.getUTCDay()]
@@ -138,7 +138,7 @@ const DATES = Array.from({ length: 15 }, (_, i) => {
     date, day, dow,
     label: `${day} мая`,
     weekend: d.getUTCDay() === 0 || d.getUTCDay() === 6,
-    reserve: day === 22 || day === 23,
+    reserve: day === 23 || day === 24,
   }
 })
 
