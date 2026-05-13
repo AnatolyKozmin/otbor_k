@@ -122,6 +122,7 @@ def _already_booking_payload(db: Session, norm_sid: str) -> Optional[dict]:
         "reviewer1": r1.name if r1 else None,
         "reviewer2": r2.name if r2 else None,
         "reviewers_pending": not (r1 and r2),
+        "cancel_count": existing.cancel_count or 0,
     }
 
 
@@ -363,3 +364,42 @@ def book(payload: BookPayload, db: Session = Depends(get_db)):
         "slot_hour": ia.slot_hour,
         "reviewers_pending": True,
     }
+
+
+class CancelPayload(BaseModel):
+    student_id: str
+
+
+@router.post("/cancel")
+def cancel_booking(payload: CancelPayload, db: Session = Depends(get_db)):
+    """Кандидат отменяет запись. Разрешено 1 раз, не менее чем за 12 часов."""
+    norm_sid = _normalize_student_id(payload.student_id)
+    if not norm_sid:
+        raise HTTPException(400, "Некорректный билет")
+
+    int_row = _find_interview_row_by_ticket(db, norm_sid)
+    if not int_row:
+        raise HTTPException(404, "Запись не найдена")
+
+    ia = db.query(InterviewAssignment).filter(
+        InterviewAssignment.row_number == int_row.row_number,
+        InterviewAssignment.slot_date.isnot(None),
+    ).first()
+    if not ia:
+        raise HTTPException(404, "Активная запись не найдена")
+
+    if (ia.cancel_count or 0) >= 1:
+        raise HTTPException(409, "Отмена уже была использована. Повторная отмена невозможна.")
+
+    slot_start = datetime.strptime(f"{ia.slot_date} {ia.slot_hour}:00", "%Y-%m-%d %H:%M")
+    if (slot_start - datetime.now()).total_seconds() < 12 * 3600:
+        raise HTTPException(400, "Отменить запись можно не менее чем за 12 часов до собеседования.")
+
+    ia.slot_date = None
+    ia.slot_hour = None
+    ia.reviewer1_id = None
+    ia.reviewer2_id = None
+    ia.cancel_count = 1
+    db.commit()
+
+    return {"ok": True}

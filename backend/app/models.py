@@ -115,6 +115,7 @@ class InterviewAssignment(Base):
     slot_hour = Column(Integer, nullable=True)  # 9..21
     booked_at = Column(DateTime, nullable=True)
     assigned_at = Column(DateTime, default=utc_naive_now)
+    cancel_count = Column(Integer, nullable=False, default=0, server_default="0")
 
     __table_args__ = (
         Index("ix_interview_slot", "slot_date", "slot_hour"),

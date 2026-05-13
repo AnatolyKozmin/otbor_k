@@ -44,6 +44,28 @@
           </div>
           <p class="hint">Хотите перенести запись? Выберите другой слот.</p>
           <button class="ghost-btn rebook-btn" @click="goRebook">Перенести запись →</button>
+
+          <div v-if="candidate.already_booked.cancel_count === 0" class="cancel-section">
+            <p class="cancel-rules">
+              ⚠ Отмена доступна <b>1 раз</b> и не менее чем <b>за 12 часов</b> до собеседования.
+              После отмены повторная запись возможна, но отменить снова нельзя.
+            </p>
+            <div v-if="cancelError" class="error-box">{{ cancelError }}</div>
+            <button class="cancel-btn" :disabled="cancelling" @click="cancelBooking">
+              {{ cancelling ? 'Отменяю…' : 'Отменить запись' }}
+            </button>
+          </div>
+          <p v-else class="hint muted-hint">Отмена уже была использована.</p>
+        </div>
+      </div>
+
+      <!-- Step: Cancelled -->
+      <div v-else-if="step === 'cancelled'" class="step">
+        <div class="success-banner">
+          <div class="big-emoji">🗑️</div>
+          <h2>Запись отменена</h2>
+          <p class="hint">Вы можете записаться снова, но отменить повторно уже нельзя.</p>
+          <button class="primary-btn" @click="goRebook">Записаться снова →</button>
         </div>
       </div>
 
@@ -158,7 +180,9 @@ const studentId = ref('')
 const loading = ref(false)
 const slotsLoading = ref(false)
 const booking = ref(false)
+const cancelling = ref(false)
 const errorMsg = ref('')
+const cancelError = ref('')
 
 const candidate = ref({ fio: '', faculty: '', already_booked: null })
 const recommended = ref([])
@@ -191,8 +215,22 @@ function onStudentIdInput(e) {
 }
 
 async function goRebook() {
+  cancelError.value = ''
   step.value = 'slots'
   await loadSlots()
+}
+
+async function cancelBooking() {
+  cancelError.value = ''
+  cancelling.value = true
+  try {
+    await axios.post(`${API_BASE}/booking/cancel`, { student_id: studentId.value.trim() })
+    step.value = 'cancelled'
+  } catch (e) {
+    cancelError.value = e.response?.data?.detail || 'Не удалось отменить запись'
+  } finally {
+    cancelling.value = false
+  }
 }
 
 async function lookup() {
@@ -543,6 +581,36 @@ h2 {
   width: 100%;
   margin-top: 0.75rem;
 }
+
+.cancel-section {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px dashed #e8eaf0;
+}
+.cancel-rules {
+  font-size: 0.82rem;
+  color: #6b7280;
+  line-height: 1.5;
+  margin: 0 0 0.75rem;
+}
+.cancel-rules b { color: #374151; }
+.cancel-btn {
+  width: 100%;
+  padding: 0.75rem;
+  background: transparent;
+  border: 1.5px solid #e63946;
+  color: #e63946;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.cancel-btn:hover:not(:disabled) {
+  background: rgba(230,57,70,0.06);
+}
+.cancel-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.muted-hint { color: #9ca3af; font-style: italic; }
 
 .state-msg {
   text-align: center; padding: 2.2rem;
