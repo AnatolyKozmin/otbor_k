@@ -13,6 +13,7 @@
         <div class="tab-switcher">
           <button :class="['tab-btn', { active: viewMode === 'table' }]" @click="viewMode = 'table'">Таблица</button>
           <button :class="['tab-btn', { active: viewMode === 'slots' }]" @click="viewMode = 'slots'">По слотам</button>
+          <button :class="['tab-btn', { active: viewMode === 'grid' }]" @click="viewMode = 'grid'">Сетка</button>
         </div>
         <input v-model="search" class="search-input" placeholder="Поиск по ФИО…" />
         <button class="btn-create" @click="createModal = true">+ Создать вручную</button>
@@ -184,6 +185,118 @@
     <!-- Saving indicator -->
     <div v-if="savingRow" class="saving-toast">Сохраняю…</div>
 
+    <!-- Grid view -->
+    <div v-if="!loading && viewMode === 'grid'" class="grid-view">
+      <div class="grid-scroll-wrap">
+        <table class="excel-grid">
+          <thead>
+            <tr>
+              <th class="hour-col"></th>
+              <th v-for="d in gridDates" :key="d" class="date-col">
+                <div class="date-col-dow">{{ formatDow(d) }}</div>
+                <div class="date-col-day">{{ formatDayShort(d) }}</div>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="h in GRID_HOURS" :key="h">
+              <td class="hour-cell">{{ h }}:00</td>
+              <td
+                v-for="d in gridDates"
+                :key="d"
+                class="grid-cell"
+                :class="{ 'has-candidates': gridCell(d, h).length > 0, 'cell-active': gridPanel && gridPanel.date === d && gridPanel.hour === h }"
+                @click="openGridPanel(d, h)"
+              >
+                <div
+                  v-for="row in gridCell(d, h)"
+                  :key="row.row_number"
+                  class="grid-chip"
+                  :class="row.reviewer1_id && row.reviewer2_id ? 'chip-green' : row.reviewer1_id || row.reviewer2_id ? 'chip-yellow' : 'chip-red'"
+                  :title="row.fio + (row.faculty ? ' · ' + row.faculty : '')"
+                >{{ shortFio(row.fio) }}</div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Grid side panel -->
+      <Teleport to="body">
+        <div v-if="gridPanel" class="grid-backdrop" @click.self="gridPanel = null"></div>
+        <div class="grid-panel" :class="{ open: gridPanel !== null }">
+          <template v-if="gridPanel">
+            <div class="gp-head">
+              <div>
+                <div class="gp-date">{{ formatDate(gridPanel.date) }}</div>
+                <div class="gp-time">{{ gridPanel.hour }}:00 — {{ gridPanel.hour + 1 }}:00</div>
+              </div>
+              <button class="close-btn" @click="gridPanel = null">✕</button>
+            </div>
+
+            <div class="gp-body">
+              <!-- Кандидаты в слоте -->
+              <div v-for="row in gridPanel.rows" :key="row.row_number" class="gp-candidate">
+                <div class="gp-cand-header">
+                  <span class="gp-cand-fio">{{ row.fio || '—' }}</span>
+                  <span v-if="row.faculty" class="fac-badge">{{ row.faculty }}</span>
+                  <span
+                    class="gp-status-dot"
+                    :class="row.reviewer1_id && row.reviewer2_id ? 'dot-green' : row.reviewer1_id || row.reviewer2_id ? 'dot-yellow' : 'dot-red'"
+                    :title="row.reviewer1_id && row.reviewer2_id ? 'Назначены оба' : 'Не полностью назначен'"
+                  ></span>
+                </div>
+                <div class="gp-selects">
+                  <div class="gp-select-row">
+                    <span class="gp-rev-label">Пров. 1</span>
+                    <select class="rev-select" :value="row.reviewer1_id || ''" @change="setReviewer(row, 1, $event.target.value)">
+                      <option value="">— не назначен —</option>
+                      <option v-for="c in sortedCoords(row)" :key="c.id" :value="c.id"
+                        :disabled="c.id === row.reviewer2_id || row.busy_same_slot_ids?.includes(c.id)">
+                        {{ optionLabel(row, c) }}
+                      </option>
+                    </select>
+                  </div>
+                  <div class="gp-select-row">
+                    <span class="gp-rev-label">Пров. 2</span>
+                    <select class="rev-select" :value="row.reviewer2_id || ''" @change="setReviewer(row, 2, $event.target.value)">
+                      <option value="">— не назначен —</option>
+                      <option v-for="c in sortedCoords(row)" :key="c.id" :value="c.id"
+                        :disabled="c.id === row.reviewer1_id || row.busy_same_slot_ids?.includes(c.id)">
+                        {{ optionLabel(row, c) }}
+                      </option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Расписание проверяющих на этот день -->
+              <div class="gp-schedule-section" v-if="daySchedule(gridPanel).length">
+                <div class="gp-schedule-title">Расписание проверяющих на {{ formatDayShort(gridPanel.date) }}</div>
+                <div v-for="rev in daySchedule(gridPanel)" :key="rev.id" class="gp-rev-day">
+                  <div class="gp-rev-name">{{ shortName(rev.name) }}</div>
+                  <div class="gp-rev-slots">
+                    <span
+                      v-for="s in rev.slots"
+                      :key="s.hour"
+                      class="gp-rev-slot"
+                      :class="{ 'gp-slot-current': s.hour === gridPanel.hour }"
+                    >
+                      <span class="gp-slot-hour">{{ s.hour }}:00</span>
+                      <span class="gp-slot-cands">{{ s.candidates.map(r => shortFio(r.fio)).join(', ') }}</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div v-else-if="gridPanel.rows.some(r => r.reviewer1_id || r.reviewer2_id)" class="gp-schedule-empty">
+                Назначенные проверяющие свободны весь день.
+              </div>
+            </div>
+          </template>
+        </div>
+      </Teleport>
+    </div>
+
     <!-- Edit anketa modal -->
     <Teleport to="body">
       <div v-if="editModal.open" class="modal-overlay" @click.self="editModal.open = false">
@@ -332,6 +445,74 @@ const slotsGrouped = computed(() => {
 
 const recoModal = ref({ open: false, loading: false, error: '', names: '', data: {} })
 const editModal = ref({ open: false, loading: false, error: '', saveError: '', saving: false, rowNumber: null, fio: '', fields: {} })
+const gridPanel = ref(null)
+
+const GRID_HOURS = Array.from({ length: 13 }, (_, i) => 9 + i)
+const DOW_SHORT = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб']
+const MONTHS_SHORT = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек']
+
+const gridDates = computed(() => {
+  const set = new Set(rows.value.filter(r => r.slot_date).map(r => r.slot_date))
+  return Array.from(set).sort()
+})
+
+function gridCell(date, hour) {
+  return rowsByFaculty.value.filter(r => r.slot_date === date && r.slot_hour === hour)
+}
+
+function openGridPanel(date, hour) {
+  const cellRows = rows.value.filter(r => r.slot_date === date && r.slot_hour === hour)
+  if (!cellRows.length) return
+  gridPanel.value = { date, hour, rows: cellRows }
+}
+
+function shortFio(fio) {
+  if (!fio) return '—'
+  const parts = fio.trim().split(/\s+/)
+  if (parts.length === 1) return parts[0].slice(0, 12)
+  return parts[0] + ' ' + parts.slice(1).map(p => p[0] + '.').join('')
+}
+
+function formatDow(date) {
+  const [y, m, d] = date.split('-').map(Number)
+  return DOW_SHORT[new Date(y, m - 1, d).getDay()]
+}
+
+function formatDayShort(date) {
+  const [, m, d] = date.split('-').map(Number)
+  return `${d} ${MONTHS_SHORT[m - 1]}`
+}
+
+function daySchedule(panel) {
+  if (!panel) return []
+  // Собираем всех проверяющих, назначенных на кандидатов в этом слоте
+  const revIds = new Set()
+  for (const row of panel.rows) {
+    if (row.reviewer1_id) revIds.add(row.reviewer1_id)
+    if (row.reviewer2_id) revIds.add(row.reviewer2_id)
+  }
+  if (!revIds.size) return []
+
+  const byId = Object.fromEntries(coordinators.value.map(c => [c.id, c.name]))
+
+  return Array.from(revIds).map(rid => {
+    // Все собесы этого проверяющего в тот же день
+    const dayRows = rows.value.filter(r =>
+      r.slot_date === panel.date &&
+      (r.reviewer1_id === rid || r.reviewer2_id === rid)
+    )
+    const hourMap = {}
+    for (const r of dayRows) {
+      if (!hourMap[r.slot_hour]) hourMap[r.slot_hour] = []
+      hourMap[r.slot_hour].push(r)
+    }
+    const slots = Object.keys(hourMap).map(Number).sort().map(h => ({
+      hour: h,
+      candidates: hourMap[h],
+    }))
+    return { id: rid, name: byId[rid] || `#${rid}`, slots }
+  }).filter(r => r.slots.length > 0)
+}
 
 const createModal = ref(false)
 const newFio = ref('')
@@ -962,4 +1143,95 @@ label {
 .slot-reco.reco-strong { background: rgba(6,160,122,0.1); color: #058c6b; }
 .slot-reco.reco-mixed  { background: rgba(67,97,238,0.08); color: #4361ee; }
 .slot-reco.reco-weak   { background: rgba(255,190,11,0.12); color: #b08000; }
+
+/* ── Excel grid ───────────────────────────────────────────── */
+.grid-view { position: relative; }
+.grid-scroll-wrap { overflow-x: auto; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+
+.excel-grid { border-collapse: separate; border-spacing: 0; font-size: 0.78rem; min-width: max-content; width: 100%; }
+.excel-grid thead th { position: sticky; top: 0; z-index: 3; background: #f7f8fb; }
+
+.hour-col { width: 52px; min-width: 52px; position: sticky; left: 0; z-index: 4 !important; background: #f7f8fb; }
+.date-col { min-width: 110px; text-align: center; padding: 0.4rem 0.3rem; border-bottom: 2px solid #e8eaf0; border-left: 1px solid #eee; }
+.date-col-dow { font-size: 0.65rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; }
+.date-col-day { font-size: 0.82rem; font-weight: 700; color: #1a1a2e; }
+
+.hour-cell {
+  position: sticky; left: 0; z-index: 2;
+  background: #f7f8fb; text-align: center;
+  font-size: 0.72rem; font-weight: 600; color: #9ca3af;
+  padding: 0.3rem 0.4rem; border-bottom: 1px solid #eee;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+.grid-cell {
+  vertical-align: top; min-height: 36px; height: 36px;
+  padding: 0.25rem; border-bottom: 1px solid #f0f0f0; border-left: 1px solid #f0f0f0;
+  cursor: pointer; transition: background 0.1s;
+}
+.grid-cell:hover { background: #f5f7ff; }
+.grid-cell.has-candidates { background: #fafbff; }
+.grid-cell.cell-active { outline: 2px solid #4361ee; outline-offset: -1px; background: #eef1ff !important; }
+
+.grid-chip {
+  display: inline-block; padding: 0.1rem 0.4rem;
+  border-radius: 4px; font-size: 0.68rem; font-weight: 600;
+  margin: 1px; max-width: 100px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+}
+.chip-green  { background: rgba(6,160,122,0.15); color: #047857; border: 1px solid rgba(6,160,122,0.3); }
+.chip-yellow { background: rgba(255,190,11,0.18); color: #92400e; border: 1px solid rgba(255,190,11,0.4); }
+.chip-red    { background: rgba(230,57,70,0.12);  color: #b91c1c; border: 1px solid rgba(230,57,70,0.25); }
+
+/* Grid panel */
+.grid-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.15); z-index: 200; }
+.grid-panel {
+  position: fixed; top: 0; right: -460px; width: 420px; height: 100vh;
+  background: white; box-shadow: -4px 0 24px rgba(0,0,0,0.12);
+  z-index: 201; display: flex; flex-direction: column;
+  transition: right 0.25s ease; overflow-y: auto;
+}
+.grid-panel.open { right: 0; }
+
+.gp-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 1.1rem 1.25rem 0.9rem; border-bottom: 1px solid #eee; flex-shrink: 0;
+  background: linear-gradient(90deg, rgba(67,97,238,0.05), transparent);
+}
+.gp-date { font-size: 0.75rem; color: #9ca3af; text-transform: capitalize; }
+.gp-time { font-size: 1.1rem; font-weight: 700; color: #1a1a2e; margin-top: 0.1rem; }
+
+.gp-body { flex: 1; overflow-y: auto; padding: 0.75rem 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; }
+
+.gp-candidate {
+  background: #fafbfc; border: 1px solid #eef0f4;
+  border-radius: 10px; padding: 0.75rem 0.9rem;
+}
+.gp-cand-header { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.55rem; flex-wrap: wrap; }
+.gp-cand-fio { font-weight: 700; font-size: 0.88rem; color: #1a1a2e; }
+.gp-status-dot { width: 8px; height: 8px; border-radius: 50%; margin-left: auto; flex-shrink: 0; }
+.dot-green  { background: #10b981; }
+.dot-yellow { background: #f59e0b; }
+.dot-red    { background: #ef4444; }
+
+.gp-selects { display: flex; flex-direction: column; gap: 0.3rem; }
+.gp-select-row { display: flex; align-items: center; gap: 0.45rem; }
+.gp-rev-label { font-size: 0.7rem; font-weight: 700; color: #9ca3af; white-space: nowrap; min-width: 42px; }
+
+/* Day schedule section */
+.gp-schedule-section { background: #f7f8fb; border-radius: 10px; padding: 0.75rem 0.9rem; }
+.gp-schedule-title { font-size: 0.7rem; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.6rem; }
+.gp-rev-day { margin-bottom: 0.6rem; }
+.gp-rev-day:last-child { margin-bottom: 0; }
+.gp-rev-name { font-size: 0.78rem; font-weight: 700; color: #374151; margin-bottom: 0.3rem; }
+.gp-rev-slots { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.gp-rev-slot {
+  display: flex; align-items: center; gap: 0.3rem;
+  padding: 0.18rem 0.55rem; border-radius: 6px;
+  background: white; border: 1px solid #e5e7eb; font-size: 0.72rem;
+}
+.gp-rev-slot.gp-slot-current { background: rgba(67,97,238,0.1); border-color: #4361ee; }
+.gp-slot-hour { font-weight: 700; color: #374151; font-variant-numeric: tabular-nums; }
+.gp-slot-cands { color: #6b7280; }
+.gp-schedule-empty { font-size: 0.78rem; color: #9ca3af; font-style: italic; }
 </style>
