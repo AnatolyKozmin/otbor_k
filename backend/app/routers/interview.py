@@ -471,6 +471,7 @@ def get_interview_info(
     prior_coord = None
     hw_package = None
     hw_submissions = 0
+    telegram = None
 
     if norm_sid:
         # анкета
@@ -478,11 +479,14 @@ def get_interview_info(
         if anketa_rows:
             ank_sid = _detect_student_id_col(anketa_rows)
             ank_coord_col = _detect_col(anketa_rows, ["был", "координатор"])
+            ank_tg_col = _detect_col(anketa_rows, ["telegram"]) or _detect_col(anketa_rows, ["тг"])
             if ank_sid:
                 for ar in anketa_rows:
                     if _normalize_student_id(ar.data.get(ank_sid, "")) == norm_sid:
                         if ank_coord_col:
                             prior_coord = str(ar.data.get(ank_coord_col, "") or "").strip() or None
+                        if ank_tg_col:
+                            telegram = str(ar.data.get(ank_tg_col, "") or "").strip() or None
                         break
 
         # ДЗ — собираем все сдачи, берём последнюю (с максимальным row_number)
@@ -515,6 +519,7 @@ def get_interview_info(
         "hw_package": hw_package,
         "hw_link": hw_link,
         "hw_submissions_count": hw_submissions,
+        "telegram": telegram,
     }
 
 

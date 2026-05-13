@@ -6,6 +6,15 @@
       <div class="header-info">
         <span class="candidate-name">{{ info.fio || 'Кандидат' }}</span>
         <div class="candidate-meta">
+          <a
+            v-if="info.telegram"
+            :href="tgLink(info.telegram)"
+            target="_blank"
+            class="meta-chip tg-chip"
+          >
+            <span class="meta-label">TG:</span>
+            <b>{{ info.telegram }}</b>
+          </a>
           <span v-if="info.prior_coord" class="meta-chip prior" :class="priorCoordClass">
             <span class="meta-label">Был коордом:</span>
             <b>{{ info.prior_coord }}</b>
@@ -509,6 +518,11 @@ function toggleScript(key) {
   scriptOpen[key] = !scriptOpen[key]
 }
 
+function tgLink(handle) {
+  const clean = handle.replace(/^@/, '')
+  return `https://t.me/${clean}`
+}
+
 const priorCoordClass = computed(() => {
   const v = (info.value?.prior_coord || '').toLowerCase()
   if (/^да\b/.test(v)) return 'yes'
@@ -857,6 +871,9 @@ onUnmounted(() => {
 .meta-chip.prior.no  { background: rgba(107,114,128,0.1); color: #6b7280; }
 .meta-chip.pkg { background: rgba(6,160,122,0.1); color: #058c6b; }
 .meta-chip.pkg b { color: #058c6b; }
+.meta-chip.tg-chip { background: rgba(0,136,204,0.1); color: #0088cc; text-decoration: none; }
+.meta-chip.tg-chip:hover { background: rgba(0,136,204,0.18); }
+.meta-chip.tg-chip b { color: #0088cc; }
 .multi-hw {
   margin-left: 0.3rem;
   padding: 0.05rem 0.4rem;

@@ -257,10 +257,10 @@ def slots(student_id: str = Query(...), db: Session = Depends(get_db)):
         if len(free_ids) < 2:
             continue
 
-        # Ёмкость: если админ задал лимит — берём min(лимит, пар из коордов)
+        # Ёмкость: если админ задал лимит — берём его, иначе авто по коордам
         auto_cap = len(free_ids) // 2
         key = (date, hour)
-        capacity = min(admin_caps[key], auto_cap) if key in admin_caps else auto_cap
+        capacity = admin_caps[key] if key in admin_caps else auto_cap
         if bookings_count.get(key, 0) >= capacity:
             continue
 
@@ -330,7 +330,7 @@ def book(payload: BookPayload, db: Session = Depends(get_db)):
         raise HTTPException(409, "В этом слоте не осталось двух свободных проверяющих")
 
     auto_cap = len(free_ids) // 2
-    capacity = min(admin_caps[key], auto_cap) if key in admin_caps else auto_cap
+    capacity = admin_caps[key] if key in admin_caps else auto_cap
     booked_count = bookings_count_now.get(key, 0)
     if booked_count >= capacity:
         raise HTTPException(409, "Слот только что заняли, выберите другой")
