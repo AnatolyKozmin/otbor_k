@@ -5,6 +5,19 @@
       <button class="back-btn" @click="$router.back()">← Назад</button>
       <div class="header-info">
         <span class="candidate-name">{{ info.fio || 'Кандидат' }}</span>
+        <div class="candidate-meta">
+          <span v-if="info.prior_coord" class="meta-chip prior" :class="priorCoordClass">
+            <span class="meta-label">Был коордом:</span>
+            <b>{{ info.prior_coord }}</b>
+          </span>
+          <span v-if="info.hw_package" class="meta-chip pkg">
+            <span class="meta-label">Пакет ДЗ:</span>
+            <b>{{ info.hw_package }}</b>
+            <span v-if="info.hw_submissions_count > 1" class="multi-hw" :title="`Кандидат сдавал ДЗ ${info.hw_submissions_count} раза — показан пакет последней сдачи`">
+              ⚠ {{ info.hw_submissions_count }} сдачи
+            </span>
+          </span>
+        </div>
         <div class="reviewers-line">
           <span class="rev-chip r1" :class="{ me: info.my_slot === 1 }">
             {{ info.reviewer1?.name || '—' }}{{ info.my_slot === 1 ? ' (я)' : '' }}
@@ -33,21 +46,127 @@
         <div v-for="section in sections" :key="section.key" class="section-block">
           <div class="section-header" :class="'sec-' + section.key">
             {{ section.section }}
+            <span v-if="section.key === 'hw_questions' && (context.homework?.alternate_submissions?.length || 0) > 0" class="alt-pill">
+              ⚠ сдач: {{ (context.homework.alternate_submissions.length + 1) }}
+            </span>
           </div>
 
+          <!-- Динамические секции: вопросы анкеты и ДЗ из /context -->
+          <template v-if="section.key === 'anketa_questions'">
+            <div v-if="!context.anketa?.qa?.length" class="form-item context-empty">
+              Ответы из анкеты не подтянулись.
+            </div>
+            <div
+              v-for="(qa, qIdx) in (context.anketa?.qa || [])"
+              :key="'ank_' + qIdx"
+              class="form-item context-item"
+            >
+              <div class="context-q">{{ qa.question }}</div>
+              <div class="context-a">{{ qa.answer }}</div>
+              <div class="note-columns">
+                <div class="note-col mine">
+                  <div class="note-label">{{ myLabel }}</div>
+                  <textarea
+                    class="note-area"
+                    :value="myNotes['anketa_n_' + qIdx] || ''"
+                    placeholder="Заметка по ответу анкеты…"
+                    @input="onInput('anketa_n_' + qIdx, $event.target.value)"
+                  />
+                </div>
+                <div class="note-col other" v-if="otherLabel">
+                  <div class="note-label other-lbl">{{ otherLabel }}</div>
+                  <div class="note-area readonly">
+                    {{ otherNotes['anketa_n_' + qIdx] || '' }}
+                    <span v-if="!otherNotes['anketa_n_' + qIdx]" class="placeholder">Пусто…</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-if="context.anketa?.prior_comments?.length" class="form-item prior-block">
+              <div class="prior-title">Комментарии проверявших анкету:</div>
+              <div v-for="(pc, pIdx) in context.anketa.prior_comments" :key="pIdx" class="prior-card">
+                <div class="prior-name">{{ pc.reviewer_name }}</div>
+                <div v-for="(v, k) in pc.text_fields" :key="k" class="prior-row">
+                  <span class="prior-k">{{ k }}:</span> {{ v }}
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <template v-else-if="section.key === 'hw_questions'">
+            <div class="form-item context-item">
+              <div class="hw-link-row">
+                <a v-if="info.hw_link" :href="info.hw_link" target="_blank" class="hw-link-btn">
+                  📂 Открыть папку с ДЗ<span v-if="info.hw_package"> (пакет {{ info.hw_package }})</span>
+                </a>
+                <span v-else class="context-empty">Нет ссылки на ДЗ</span>
+              </div>
+              <div v-if="context.homework?.alternate_submissions?.length" class="alt-list">
+                <div class="alt-list-title">Другие сдачи этого кандидата:</div>
+                <div v-for="alt in context.homework.alternate_submissions" :key="alt.row_number" class="alt-item">
+                  <span class="alt-pkg" v-if="alt.package">Пакет {{ alt.package }}</span>
+                  <a v-if="alt.link" :href="alt.link" target="_blank" class="alt-link">открыть</a>
+                  <span v-else class="muted">без ссылки</span>
+                </div>
+              </div>
+              <div class="note-columns">
+                <div class="note-col mine">
+                  <div class="note-label">{{ myLabel }}</div>
+                  <textarea
+                    class="note-area"
+                    :value="myNotes['hw_notes'] || ''"
+                    placeholder="Заметка по ДЗ…"
+                    @input="onInput('hw_notes', $event.target.value)"
+                  />
+                </div>
+                <div class="note-col other" v-if="otherLabel">
+                  <div class="note-label other-lbl">{{ otherLabel }}</div>
+                  <div class="note-area readonly">
+                    {{ otherNotes['hw_notes'] || '' }}
+                    <span v-if="!otherNotes['hw_notes']" class="placeholder">Пусто…</span>
+                  </div>
+                </div>
+              </div>
+              <div v-if="context.homework?.prior_comments?.length" class="prior-block">
+                <div class="prior-title">Комментарии проверявших ДЗ:</div>
+                <div v-for="(pc, pIdx) in context.homework.prior_comments" :key="pIdx" class="prior-card">
+                  <div class="prior-name">{{ pc.reviewer_name }}</div>
+                  <div v-for="(v, k) in pc.text_fields" :key="k" class="prior-row">
+                    <span class="prior-k">{{ k }}:</span> {{ v }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <template v-else>
           <div
             v-for="(item, idx) in section.items"
             :key="section.key + '_' + idx"
             class="form-item"
             :class="item.type"
           >
-            <div v-if="item.type === 'script'" class="script-text">{{ item.text }}</div>
+            <div v-if="item.type === 'script' && item.collapsible" class="script-collapsible">
+              <button
+                class="script-toggle"
+                @click="toggleScript(section.key + '_' + idx)"
+              >
+                <span class="toggle-icon">{{ scriptOpen[section.key + '_' + idx] ? '▾' : '▸' }}</span>
+                Скрипт ({{ scriptOpen[section.key + '_' + idx] ? 'свернуть' : 'развернуть' }})
+              </button>
+              <div v-if="scriptOpen[section.key + '_' + idx]" class="script-text">
+                <span v-for="(seg, sIdx) in markBold(item.text)" :key="sIdx" :class="{ bold: seg.bold }">{{ seg.text }}</span>
+              </div>
+            </div>
+            <div v-else-if="item.type === 'script'" class="script-text">
+              <span v-for="(seg, sIdx) in markBold(item.text)" :key="sIdx" :class="{ bold: seg.bold }">{{ seg.text }}</span>
+            </div>
             <div v-else-if="item.type === 'label'" class="sub-label">{{ item.text }}</div>
 
             <template v-else>
               <div class="question-text" :class="{ 'is-case': item.type === 'case' }">
                 <span v-if="item.type === 'case'" class="case-badge">КЕЙС</span>
-                {{ stripCasePrefix(item.text) }}
+                <span v-for="(seg, sIdx) in markBold(stripCasePrefix(item.text))" :key="sIdx" :class="{ bold: seg.bold }">{{ seg.text }}</span>
               </div>
               <div class="note-columns">
                 <div class="note-col mine">
@@ -69,6 +188,7 @@
               </div>
             </template>
           </div>
+          </template>
         </div>
 
         <!-- Competency scoring -->
@@ -330,6 +450,7 @@ const syncStatus = ref('')
 
 const info = ref({ fio: '', my_slot: null, reviewer1: null, reviewer2: null })
 const sections = ref([])
+const context = ref({ anketa: null, homework: null })
 const myNotes = reactive({})
 const otherNotes = reactive({})
 const mySlot = ref(null)
@@ -380,6 +501,38 @@ function setScore(key, value) {
 
 function stripCasePrefix(text) {
   return text.replace(/^КЕЙС\s*\n\n?/, '')
+}
+
+// Свёрнутые/развёрнутые collapsible-скрипты по ключу секции+индекса
+const scriptOpen = reactive({})
+function toggleScript(key) {
+  scriptOpen[key] = !scriptOpen[key]
+}
+
+const priorCoordClass = computed(() => {
+  const v = (info.value?.prior_coord || '').toLowerCase()
+  if (/^да\b/.test(v)) return 'yes'
+  if (/^нет\b/.test(v)) return 'no'
+  return ''
+})
+
+// Превращает текст в массив сегментов {text, bold}.
+// Bold-им многословные комменты в скобках («не задаём тем, кто подаётся 2-й раз»),
+// но НЕ короткие: «(-а)», «(пауза)», «(?)» и т.п.
+function markBold(text) {
+  if (!text) return [{ text: '', bold: false }]
+  const out = []
+  // (≥4 символов И содержит пробел) — фактически «фраза в скобках»
+  const re = /\((?=[^()]*\s)[^()]{4,}\)/g
+  let last = 0
+  let m
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push({ text: text.slice(last, m.index), bold: false })
+    out.push({ text: m[0], bold: true })
+    last = m.index + m[0].length
+  }
+  if (last < text.length) out.push({ text: text.slice(last), bold: false })
+  return out.length ? out : [{ text, bold: false }]
 }
 
 function onInput(fieldKey, value) {
@@ -631,13 +784,15 @@ async function resetRocket() {
 // ── Lifecycle ─────────────────────────────────────────────────────────────
 onMounted(async () => {
   try {
-    const [formResp, infoResp, notesResp] = await Promise.all([
+    const [formResp, infoResp, notesResp, ctxResp] = await Promise.all([
       api.get('/interview/form'),
       api.get(`/interview/${rowNumber}/info`),
       api.get(`/interview/${rowNumber}/notes`),
+      api.get(`/interview/${rowNumber}/context`).catch(() => ({ data: { anketa: null, homework: null } })),
     ])
     sections.value = formResp.data.sections
     info.value = infoResp.data
+    context.value = ctxResp.data
     mySlot.value = infoResp.data.my_slot
 
     const myKey = `reviewer${mySlot.value}`
@@ -683,7 +838,35 @@ onUnmounted(() => {
 .back-btn:hover { border-color: #4361ee; color: #4361ee; }
 .header-info { flex: 1; min-width: 0; }
 .candidate-name { font-weight: 700; font-size: 1.1rem; color: #1a1a2e; display: block; }
-.reviewers-line { display: flex; align-items: center; gap: 0.35rem; margin-top: 0.2rem; }
+.candidate-meta {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+.meta-chip {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.18rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  background: #f3f4f8;
+  color: #555;
+}
+.meta-chip b { color: #1a1a2e; font-weight: 700; }
+.meta-chip .meta-label { color: #888; font-weight: 500; }
+.meta-chip.prior.yes { background: rgba(67,97,238,0.12); color: #4361ee; }
+.meta-chip.prior.yes b { color: #4361ee; }
+.meta-chip.prior.no  { background: rgba(107,114,128,0.1); color: #6b7280; }
+.meta-chip.pkg { background: rgba(6,160,122,0.1); color: #058c6b; }
+.meta-chip.pkg b { color: #058c6b; }
+.multi-hw {
+  margin-left: 0.3rem;
+  padding: 0.05rem 0.4rem;
+  background: rgba(255,190,11,0.25);
+  color: #92400e;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.reviewers-line { display: flex; align-items: center; gap: 0.35rem; margin-top: 0.4rem; }
 .rev-chip { padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; }
 .rev-chip.r1 { background: rgba(67,97,238,0.08); color: #4361ee; }
 .rev-chip.r2 { background: rgba(6,160,122,0.08); color: #06a07a; }
@@ -743,7 +926,15 @@ onUnmounted(() => {
   border-left: 3px solid #c0c8d4;
   max-width: 100%;
 }
-.sub-label { font-size: 0.8rem; font-weight: 700; color: #4361ee; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.2rem 0; }
+.sub-label {
+  font-size: 0.9rem; font-weight: 700; color: #4361ee;
+  background: rgba(67,97,238,0.07);
+  border-left: 3px solid #4361ee;
+  border-radius: 6px;
+  padding: 0.5rem 0.85rem;
+  margin: 0.25rem 0;
+  line-height: 1.4;
+}
 .question-text {
   font-size: 0.95rem; color: #1a1a2e; font-weight: 500;
   margin-bottom: 0.75rem;
@@ -752,6 +943,96 @@ onUnmounted(() => {
   word-break: break-word;
   line-height: 1.5;
 }
+.question-text .bold,
+.script-text .bold {
+  font-weight: 700;
+  color: #4361ee;
+}
+
+/* Context (анкета / ДЗ — подтянутые ответы кандидата) */
+.context-item { background: linear-gradient(180deg, #fafbfc 0%, white 100%); }
+.context-empty { color: #aaa; font-style: italic; font-size: 0.9rem; }
+.context-q {
+  font-size: 0.78rem; font-weight: 600;
+  color: #4361ee; text-transform: uppercase; letter-spacing: 0.03em;
+  margin-bottom: 0.35rem;
+}
+.context-a {
+  background: white;
+  border: 1px solid #e8eaf0;
+  border-left: 3px solid #4361ee;
+  border-radius: 7px;
+  padding: 0.7rem 0.85rem;
+  color: #1f2937;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin-bottom: 0.75rem;
+}
+.alt-pill {
+  display: inline-block;
+  margin-left: 0.6rem;
+  padding: 0.1rem 0.5rem;
+  background: rgba(255,255,255,0.25);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.hw-link-row { margin-bottom: 0.85rem; }
+.hw-link-btn {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.55rem 1rem;
+  background: rgba(6,160,122,0.1);
+  color: #058c6b;
+  border: 1.5px solid rgba(6,160,122,0.3);
+  border-radius: 9px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.12s;
+}
+.hw-link-btn:hover { background: rgba(6,160,122,0.18); border-color: #06a07a; }
+.alt-list {
+  background: rgba(255,190,11,0.08);
+  border: 1px dashed rgba(255,190,11,0.35);
+  border-radius: 8px;
+  padding: 0.5rem 0.85rem;
+  margin-bottom: 0.85rem;
+  font-size: 0.85rem;
+}
+.alt-list-title { font-weight: 600; color: #92400e; margin-bottom: 0.25rem; }
+.alt-item { display: flex; gap: 0.5rem; align-items: center; padding: 0.15rem 0; }
+.alt-pkg { color: #555; }
+.alt-link { color: #4361ee; }
+.prior-block {
+  margin-top: 0.85rem;
+  padding: 0.65rem 0.85rem;
+  background: #f7f8fc;
+  border-radius: 7px;
+  border-left: 3px solid #c0c8d4;
+}
+.prior-title { font-size: 0.78rem; font-weight: 700; color: #555; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.prior-card { background: white; border-radius: 5px; padding: 0.45rem 0.65rem; margin-bottom: 0.35rem; font-size: 0.83rem; }
+.prior-name { font-weight: 700; color: #4361ee; margin-bottom: 0.2rem; font-size: 0.78rem; }
+.prior-row { color: #4b5563; line-height: 1.4; margin: 0.15rem 0; }
+.prior-k { color: #888; font-weight: 600; }
+
+.script-collapsible { margin: 0.25rem 0; }
+.script-toggle {
+  background: none;
+  border: 1.5px dashed #c0c8d4;
+  color: #4361ee;
+  border-radius: 8px;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+  transition: background 0.12s, border-color 0.12s;
+}
+.script-toggle:hover { background: rgba(67,97,238,0.06); border-color: #4361ee; }
+.script-toggle .toggle-icon { display: inline-block; margin-right: 0.35rem; font-size: 0.85rem; }
 .question-text.is-case { background: rgba(180,83,9,0.05); border-left: 3px solid #b45309; padding: 0.5rem 0.75rem; border-radius: 4px; }
 .case-badge { display: inline-block; background: #b45309; color: white; font-size: 0.65rem; font-weight: 700; padding: 0.1rem 0.4rem; border-radius: 3px; margin-right: 0.4rem; vertical-align: middle; }
 

@@ -77,6 +77,30 @@ def _resolve_notes(row_number: int, reviewer_id: int, db: Session) -> Dict[str, 
 FIO_KEYWORDS = ["фио", "имя", "фамилия", "ф.и.о"]
 STUDENT_ID_KEYWORDS = ["студ", "билет"]
 
+# Названия колонок, которые НЕ являются содержательными вопросами анкеты/ДЗ
+# (используются в /context — фильтр «show only real questions»)
+METADATA_HEADER_KEYWORDS = [
+    "проверяющ", "∑",  "сумма",
+    "фио", "имя", "фамилия",
+    "почт", "gmail", "@gmail", "email",
+    "ник", "@koord", "@telegram", "telegram", "тг",
+    "вк", "vk.com", "vk ",
+    "факультет", "курс обучения", "учебная группа",
+    "студ", "билет",
+    "выговор", "успеваемост", "сесси",
+    "состоишь", "организац",
+    "занятост", "лето",
+    "ссылк", "пакет",
+    "был(а) ли ты уже координатор", "был ли ты уже координатор",
+]
+
+
+def _is_metadata_col(col_name: str) -> bool:
+    cl = col_name.lower().strip()
+    if not cl or cl.startswith("_"):
+        return True
+    return any(kw in cl for kw in METADATA_HEADER_KEYWORDS)
+
 
 def _detect_col(rows: List, keywords: List[str]) -> Optional[str]:
     if not rows:
@@ -330,7 +354,18 @@ def get_interview_info(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Метаданные собеса: ФИО кандидата, имена проверяющих, слот текущего пользователя."""
+    """Метаданные собеса + подтянутая инфа из анкеты и ДЗ.
+
+    Возвращает: ФИО, проверяющие, слот, плюс:
+      - prior_coord: ответ из анкеты «был ли уже Координатором?»
+      - hw_package: номер пакета из ДЗ (берём последнюю запись)
+      - hw_submissions_count: сколько раз кандидат сдавал ДЗ (для дублей)
+    """
+    from app.routers.admin_ops import (
+        _detect_student_id_col,
+        _normalize_student_id,
+    )
+
     row = db.query(SheetRow).filter(
         SheetRow.sheet == "interview", SheetRow.row_number == row_number
     ).first()
@@ -343,6 +378,7 @@ def get_interview_info(
 
     users_map = {u.id: u.name for u in db.query(User).all()}
     fio_col = _detect_col([row], FIO_KEYWORDS)
+    sid_col = _detect_col([row], STUDENT_ID_KEYWORDS)
 
     my_slot = None
     if a:
@@ -351,12 +387,151 @@ def get_interview_info(
         elif a.reviewer2_id == user.id:
             my_slot = 2
 
+    # подтягиваем данные из анкеты/ДЗ по студ. билету
+    student_id_raw = row.data.get(sid_col, "") if sid_col else ""
+    norm_sid = _normalize_student_id(student_id_raw)
+    prior_coord = None
+    hw_package = None
+    hw_submissions = 0
+
+    if norm_sid:
+        # анкета
+        anketa_rows = db.query(SheetRow).filter(SheetRow.sheet == "anketa").all()
+        if anketa_rows:
+            ank_sid = _detect_student_id_col(anketa_rows)
+            ank_coord_col = _detect_col(anketa_rows, ["был", "координатор"])
+            if ank_sid:
+                for ar in anketa_rows:
+                    if _normalize_student_id(ar.data.get(ank_sid, "")) == norm_sid:
+                        if ank_coord_col:
+                            prior_coord = str(ar.data.get(ank_coord_col, "") or "").strip() or None
+                        break
+
+        # ДЗ — собираем все сдачи, берём последнюю (с максимальным row_number)
+        hw_link = None
+        hw_rows = db.query(SheetRow).filter(SheetRow.sheet == "homework").order_by(
+            SheetRow.row_number
+        ).all()
+        if hw_rows:
+            hw_sid = _detect_student_id_col(hw_rows)
+            hw_pkg_col = _detect_col(hw_rows, ["пакет"])
+            hw_link_col = _detect_col(hw_rows, ["ссылк"])
+            if hw_sid:
+                matching = [h for h in hw_rows if _normalize_student_id(h.data.get(hw_sid, "")) == norm_sid]
+                hw_submissions = len(matching)
+                if matching:
+                    latest = max(matching, key=lambda h: h.row_number)
+                    if hw_pkg_col:
+                        hw_package = str(latest.data.get(hw_pkg_col, "") or "").strip() or None
+                    if hw_link_col:
+                        hw_link = str(latest.data.get(hw_link_col, "") or "").strip() or None
+
     return {
         "row_number": row_number,
         "fio": row.data.get(fio_col, "") if fio_col else "",
+        "student_id": student_id_raw,
         "my_slot": my_slot,
         "reviewer1": {"id": a.reviewer1_id, "name": users_map.get(a.reviewer1_id)} if a and a.reviewer1_id else None,
         "reviewer2": {"id": a.reviewer2_id, "name": users_map.get(a.reviewer2_id)} if a and a.reviewer2_id else None,
+        "prior_coord": prior_coord,
+        "hw_package": hw_package,
+        "hw_link": hw_link,
+        "hw_submissions_count": hw_submissions,
+    }
+
+
+@router.get("/{row_number}/context")
+def get_interview_context(
+    row_number: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Подтянутый контент анкеты и ДЗ кандидата + комментарии прошлых проверяющих.
+
+    Используется в форме собеса для секций «Вопросы с анкеты» и «Вопросы с ДЗ»:
+    интервьюер видит ответы кандидата + комментарии тех, кто проверял анкету/ДЗ.
+    Если кандидат сдавал ДЗ несколько раз — берётся последняя сдача, остальные
+    перечислены в alternate_submissions.
+    """
+    from app.routers.admin_ops import _detect_student_id_col, _normalize_student_id
+
+    interview_row = db.query(SheetRow).filter(
+        SheetRow.sheet == "interview", SheetRow.row_number == row_number
+    ).first()
+    if interview_row is None:
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+
+    sid_col = _detect_col([interview_row], STUDENT_ID_KEYWORDS)
+    norm_sid = _normalize_student_id(interview_row.data.get(sid_col, "")) if sid_col else ""
+
+    def _build_block(sheet_key: str) -> dict:
+        rows = db.query(SheetRow).filter(SheetRow.sheet == sheet_key).order_by(
+            SheetRow.row_number
+        ).all()
+        if not rows or not norm_sid:
+            return {"row_number": None, "qa": [], "prior_comments": [], "alternate_submissions": []}
+
+        sid_c = _detect_student_id_col(rows)
+        if not sid_c:
+            return {"row_number": None, "qa": [], "prior_comments": [], "alternate_submissions": []}
+
+        matching = [r for r in rows if _normalize_student_id(r.data.get(sid_c, "")) == norm_sid]
+        if not matching:
+            return {"row_number": None, "qa": [], "prior_comments": [], "alternate_submissions": []}
+
+        # Берём последнюю сдачу (с максимальным row_number)
+        main = max(matching, key=lambda r: r.row_number)
+        pkg_c = _detect_col(rows, ["пакет"])
+        link_c = _detect_col(rows, ["ссылк"])
+        def _alt_info(r):
+            d = {"row_number": r.row_number}
+            if pkg_c:
+                d["package"] = str(r.data.get(pkg_c, "") or "").strip() or None
+            if link_c:
+                d["link"] = str(r.data.get(link_c, "") or "").strip() or None
+            return d
+        alternates = [_alt_info(r) for r in matching if r.row_number != main.row_number]
+
+        # Вопросы (отфильтровать метаданные)
+        qa = []
+        for col, val in main.data.items():
+            if _is_metadata_col(col):
+                continue
+            v = str(val or "").strip()
+            if not v:
+                continue
+            qa.append({"question": col, "answer": v})
+
+        # Комментарии прошлых проверяющих (Review.scores содержит текстовые поля)
+        reviews = db.query(Review).filter(
+            Review.sheet == sheet_key, Review.row_number == main.row_number
+        ).all()
+        users_map = {u.id: u.name for u in db.query(User).all()}
+        prior = []
+        for rv in reviews:
+            scores = rv.scores or {}
+            # отделяем числовые скоры от текстовых полей
+            text_fields = {k: v for k, v in scores.items() if isinstance(v, str) and v.strip()}
+            num_fields = {k: v for k, v in scores.items() if not isinstance(v, str)}
+            if not text_fields and not num_fields:
+                continue
+            prior.append({
+                "reviewer_name": users_map.get(rv.reviewer_id, f"#{rv.reviewer_id}"),
+                "text_fields": text_fields,
+                "scores": num_fields,
+                "saved_at": rv.saved_at.isoformat() if rv.saved_at else None,
+            })
+
+        return {
+            "row_number": main.row_number,
+            "qa": qa,
+            "prior_comments": prior,
+            "alternate_submissions": alternates,
+        }
+
+    return {
+        "anketa": _build_block("anketa"),
+        "homework": _build_block("homework"),
     }
 
 
