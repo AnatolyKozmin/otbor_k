@@ -11,16 +11,16 @@
           v-model="studentId"
           @input="onStudentIdInput"
           class="big-input pin-input"
-          placeholder="123456"
+          placeholder="123456(7)"
           inputmode="numeric"
           pattern="[0-9]*"
-          maxlength="6"
+          maxlength="7"
           autocomplete="off"
           @keydown.enter="lookup"
           :disabled="loading"
         />
         <div v-if="errorMsg" class="error-box">{{ errorMsg }}</div>
-        <button class="primary-btn" :disabled="loading || studentId.length < 6" @click="lookup">
+        <button class="primary-btn" :disabled="loading || studentId.length < 6 || studentId.length > 7" @click="lookup">
           {{ loading ? 'Ищу…' : 'Продолжить →' }}
         </button>
       </div>
@@ -211,7 +211,7 @@ function resetForm() {
 }
 
 function onStudentIdInput(e) {
-  studentId.value = e.target.value.replace(/\D/g, '').slice(0, 6)
+  studentId.value = e.target.value.replace(/\D/g, '').slice(0, 7)
 }
 
 async function goRebook() {
