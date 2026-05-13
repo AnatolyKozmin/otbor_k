@@ -6,6 +6,7 @@
       <div class="header-info">
         <span class="candidate-name">{{ info.fio || 'Кандидат' }}</span>
         <div class="candidate-meta">
+          <span v-if="info.faculty" class="meta-chip fac-chip">{{ info.faculty }}</span>
           <a
             v-if="info.telegram"
             :href="tgLink(info.telegram)"
@@ -871,6 +872,7 @@ onUnmounted(() => {
 .meta-chip.prior.no  { background: rgba(107,114,128,0.1); color: #6b7280; }
 .meta-chip.pkg { background: rgba(6,160,122,0.1); color: #058c6b; }
 .meta-chip.pkg b { color: #058c6b; }
+.meta-chip.fac-chip { background: rgba(67,97,238,0.1); color: #4361ee; font-weight: 700; }
 .meta-chip.tg-chip { background: rgba(0,136,204,0.1); color: #0088cc; text-decoration: none; }
 .meta-chip.tg-chip:hover { background: rgba(0,136,204,0.18); }
 .meta-chip.tg-chip b { color: #0088cc; }

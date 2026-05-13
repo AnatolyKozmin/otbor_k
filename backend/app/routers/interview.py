@@ -476,8 +476,12 @@ def get_interview_info(
     hw_package = None
     hw_submissions = 0
     telegram = None
+    faculty = None
 
     if norm_sid:
+        from app.routers.admin_ops import _build_id_to_faculty_map
+        faculty = _build_id_to_faculty_map(db).get(norm_sid) or None
+
         # анкета
         anketa_rows = db.query(SheetRow).filter(SheetRow.sheet == "anketa").all()
         if anketa_rows:
@@ -519,6 +523,7 @@ def get_interview_info(
         "my_slot": my_slot,
         "reviewer1": {"id": a.reviewer1_id, "name": users_map.get(a.reviewer1_id)} if a and a.reviewer1_id else None,
         "reviewer2": {"id": a.reviewer2_id, "name": users_map.get(a.reviewer2_id)} if a and a.reviewer2_id else None,
+        "faculty": faculty,
         "prior_coord": prior_coord,
         "hw_package": hw_package,
         "hw_link": hw_link,
