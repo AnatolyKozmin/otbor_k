@@ -25,13 +25,23 @@ def load_sheets(db: Session = Depends(get_db), _: User = Depends(require_admin))
 
     counts: Dict[str, int] = {}
     for sheet_key, (_, rows) in all_data.items():
-        db.query(SheetRow).filter(SheetRow.sheet == sheet_key).delete()
+        if sheet_key == "interview":
+            # Удаляем только строки из Google Sheets (row_number < 10000).
+            # Синтетические строки бронирования (≥ 10000) сохраняем —
+            # на них ссылаются InterviewAssignment записи кандидатов.
+            db.query(SheetRow).filter(
+                SheetRow.sheet == sheet_key,
+                SheetRow.row_number < 10000,
+            ).delete()
+        else:
+            db.query(SheetRow).filter(SheetRow.sheet == sheet_key).delete()
+
         for row in rows:
-            db.add(SheetRow(
-                sheet=sheet_key,
-                row_number=row.get("_row", 0),
-                data=row,
-            ))
+            rn = row.get("_row", 0)
+            # Для interview пропускаем строки, которые уже есть как синтетические
+            if sheet_key == "interview" and rn >= 10000:
+                continue
+            db.add(SheetRow(sheet=sheet_key, row_number=rn, data=row))
         counts[sheet_key] = len(rows)
 
     db.commit()
