@@ -349,6 +349,67 @@ async def start_bot_polling() -> None:
             parse_mode="HTML",
         )
 
+    @dp.message(Command("кто"))
+    async def cmd_kto(message: Message) -> None:
+        """Расписание собесов на завтра."""
+        from datetime import date, timedelta
+        from app.models import InterviewAssignment, SheetRow
+
+        tomorrow = (date.today() + timedelta(days=1)).strftime("%Y-%m-%d")
+        MONTHS = ["января","февраля","марта","апреля","мая","июня",
+                  "июля","августа","сентября","октября","ноября","декабря"]
+        m = int(tomorrow.split("-")[1])
+        d = int(tomorrow.split("-")[2])
+        date_label = f"{d} {MONTHS[m-1]}"
+
+        db = Session(engine)
+        try:
+            assignments = (
+                db.query(InterviewAssignment)
+                .filter(InterviewAssignment.slot_date == tomorrow)
+                .order_by(InterviewAssignment.slot_hour)
+                .all()
+            )
+            if not assignments:
+                await message.reply(f"На {date_label} собесов нет.", parse_mode="HTML")
+                return
+
+            users_map = {u.id: u.name for u in db.query(User).all()}
+
+            # Группируем по часу
+            by_hour: dict[int, list] = {}
+            for a in assignments:
+                by_hour.setdefault(a.slot_hour, []).append(a)
+
+            # Для каждого получаем ФИО кандидата
+            interview_rows = {
+                r.row_number: r
+                for r in db.query(SheetRow).filter(SheetRow.sheet == "interview").all()
+            }
+
+            lines = [f"📅 <b>Собесы на {date_label}</b>\n"]
+            for hour in sorted(by_hour):
+                lines.append(f"🕐 <b>{hour}:00 — {hour+1}:00</b>")
+                for a in by_hour[hour]:
+                    row = interview_rows.get(a.row_number)
+                    fio = "—"
+                    if row:
+                        for col, val in row.data.items():
+                            if col.startswith("_"): continue
+                            if any(kw in col.lower() for kw in ["фио","имя","фамилия"]):
+                                fio = str(val or "").strip() or "—"
+                                break
+                    r1 = users_map.get(a.reviewer1_id, "—") if a.reviewer1_id else "—"
+                    r2 = users_map.get(a.reviewer2_id, "—") if a.reviewer2_id else "—"
+                    status = "✅" if a.reviewer1_id and a.reviewer2_id else "⚠️"
+                    lines.append(f"  {status} {fio}")
+                    lines.append(f"       {r1} + {r2}")
+                lines.append("")
+
+            await message.reply("\n".join(lines), parse_mode="HTML")
+        finally:
+            db.close()
+
     @dp.my_chat_member()
     async def on_my_chat_member(update: ChatMemberUpdated) -> None:
         """Автоматически сохраняем чат, когда бота добавляют в группу/канал."""
@@ -380,6 +441,6 @@ async def start_bot_polling() -> None:
 
     print("[bot] Polling started")
     try:
-        await dp.start_polling(bot, allowed_updates=["message", "my_chat_member"])
+        await dp.start_polling(bot, allowed_updates=["message", "my_chat_member", "chat_member"])
     finally:
         await bot.session.close()
