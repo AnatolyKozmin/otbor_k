@@ -15,7 +15,12 @@
           <button :class="['tab-btn', { active: viewMode === 'slots' }]" @click="viewMode = 'slots'">По слотам</button>
           <button :class="['tab-btn', { active: viewMode === 'grid' }]" @click="viewMode = 'grid'">Сетка</button>
         </div>
+        <label class="hide-past-toggle">
+          <input type="checkbox" v-model="hidePast" />
+          Скрыть прошедшие
+        </label>
         <input v-model="search" class="search-input" placeholder="Поиск по ФИО…" />
+        <button class="btn-unbooked" @click="openUnbooked">Не записались</button>
         <button class="btn-create" @click="createModal = true">+ Создать вручную</button>
       </div>
     </div>
@@ -308,6 +313,35 @@
       </Teleport>
     </div>
 
+    <!-- Unbooked modal -->
+    <Teleport to="body">
+      <div v-if="unbookedModal.open" class="modal-overlay" @click.self="unbookedModal.open = false">
+        <div class="modal unbooked-modal">
+          <div class="modal-head">
+            <div>
+              <div class="modal-title">Сдали ДЗ, но не записались</div>
+              <div class="modal-sub" v-if="!unbookedModal.loading">{{ unbookedModal.rows.length }} человек</div>
+            </div>
+            <button class="close-btn" @click="unbookedModal.open = false">✕</button>
+          </div>
+          <div v-if="unbookedModal.loading" class="modal-state">Загрузка…</div>
+          <div v-else-if="unbookedModal.error" class="modal-state err">{{ unbookedModal.error }}</div>
+          <div v-else-if="!unbookedModal.rows.length" class="modal-state">Все записались 🎉</div>
+          <div v-else class="unbooked-content">
+            <div class="unbooked-group" v-for="(group, fac) in groupedUnbooked" :key="fac">
+              <div class="unbooked-fac">{{ fac || 'Факультет не определён' }} <span class="unbooked-fac-count">{{ group.length }}</span></div>
+              <div v-for="r in group" :key="r.sid" class="unbooked-row">
+                <span class="unbooked-fio">{{ r.fio }}</span>
+                <span class="unbooked-sid muted">{{ r.sid }}</span>
+                <a v-if="r.vk" :href="vkLink(r.vk)" target="_blank" class="unbooked-vk">VK</a>
+                <span v-else class="muted">нет VK</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- Edit anketa modal -->
     <Teleport to="body">
       <div v-if="editModal.open" class="modal-overlay" @click.self="editModal.open = false">
@@ -423,6 +457,18 @@ const search = ref('')
 const savingRow = ref(false)
 const viewMode = ref('table')
 const activeFaculty = ref('Все')
+const hidePast = ref(false)
+const unbookedModal = ref({ open: false, loading: false, rows: [], error: '' })
+
+const groupedUnbooked = computed(() => {
+  const map = {}
+  for (const r of unbookedModal.value.rows) {
+    const fac = r.faculty || ''
+    if (!map[fac]) map[fac] = []
+    map[fac].push(r)
+  }
+  return map
+})
 
 const faculties = computed(() => {
   const set = new Set()
@@ -431,8 +477,16 @@ const faculties = computed(() => {
 })
 
 const rowsByFaculty = computed(() => {
-  if (activeFaculty.value === 'Все') return rows.value
-  return rows.value.filter(r => r.faculty === activeFaculty.value)
+  let list = rows.value
+  if (hidePast.value) {
+    const now = new Date()
+    list = list.filter(r => {
+      if (!r.slot_date || r.slot_hour == null) return true
+      return new Date(`${r.slot_date}T${String(r.slot_hour + 1).padStart(2,'0')}:00`) > now
+    })
+  }
+  if (activeFaculty.value !== 'Все') list = list.filter(r => r.faculty === activeFaculty.value)
+  return list
 })
 
 const filteredRows = computed(() => {
@@ -694,6 +748,24 @@ function isCommonSlot(date, hour) {
   return coords.length === 2 &&
     coords[0].slots.some(s => s.date === date && s.hour === hour) &&
     coords[1].slots.some(s => s.date === date && s.hour === hour)
+}
+
+async function openUnbooked() {
+  unbookedModal.value = { open: true, loading: true, rows: [], error: '' }
+  try {
+    const { data } = await api.get('/admin/unbooked')
+    unbookedModal.value.rows = data.rows
+  } catch (e) {
+    unbookedModal.value.error = e.response?.data?.detail || 'Ошибка загрузки'
+  } finally {
+    unbookedModal.value.loading = false
+  }
+}
+
+function vkLink(val) {
+  if (!val) return '#'
+  if (val.startsWith('http')) return val
+  return `https://vk.com/${val.replace(/^@/, '').replace(/^vk\.com\//, '')}`
 }
 
 async function openEditModal(row) {
@@ -1070,6 +1142,46 @@ label {
   font-size: 0.78rem; color: #888;
   padding-top: 0.25rem; border-top: 1px solid #f0f0f0;
 }
+
+.hide-past-toggle {
+  display: flex; align-items: center; gap: 0.35rem;
+  font-size: 0.8rem; color: #6b7280; cursor: pointer; white-space: nowrap;
+}
+
+.btn-unbooked {
+  padding: 0.5rem 1rem; background: #f59e0b; color: white;
+  border: none; border-radius: 8px; font-size: 0.875rem;
+  font-weight: 600; cursor: pointer; white-space: nowrap;
+  transition: background 0.15s;
+}
+.btn-unbooked:hover { background: #d97706; }
+
+.unbooked-modal { width: 560px; max-width: 95vw; max-height: 85vh; display: flex; flex-direction: column; }
+.unbooked-content { overflow-y: auto; padding: 0.75rem 1.5rem 1.25rem; }
+.unbooked-group { margin-bottom: 1rem; }
+.unbooked-fac {
+  font-size: 0.72rem; font-weight: 700; color: #4361ee;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 0.3rem 0; border-bottom: 1.5px solid #e8eaf0;
+  margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.4rem;
+}
+.unbooked-fac-count {
+  background: rgba(67,97,238,0.1); color: #4361ee;
+  border-radius: 999px; padding: 0.05rem 0.45rem;
+  font-size: 0.7rem;
+}
+.unbooked-row {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.3rem 0; border-bottom: 1px solid #f5f5f5; font-size: 0.875rem;
+}
+.unbooked-fio { flex: 1; font-weight: 500; }
+.unbooked-sid { font-family: monospace; font-size: 0.78rem; }
+.unbooked-vk {
+  padding: 0.15rem 0.55rem; background: rgba(39,90,155,0.1);
+  color: #275a9b; border-radius: 5px; font-size: 0.75rem;
+  font-weight: 600; text-decoration: none; white-space: nowrap;
+}
+.unbooked-vk:hover { background: rgba(39,90,155,0.2); }
 
 .close-btn {
   background: none; border: none; font-size: 1rem;

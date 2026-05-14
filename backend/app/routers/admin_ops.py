@@ -627,3 +627,102 @@ def update_anketa_row(
     row.data = {**row.data, **payload.fields}
     db.commit()
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Кандидаты, сдавшие ДЗ но не записавшиеся на собес
+# ---------------------------------------------------------------------------
+
+@router.get("/unbooked")
+def get_unbooked(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Кандидаты, у которых есть домашка, но нет брони на собес."""
+    from app.models import InterviewAssignment
+
+    hw_rows = db.query(SheetRow).filter(SheetRow.sheet == "homework").order_by(SheetRow.row_number).all()
+    if not hw_rows:
+        return {"rows": [], "total": 0}
+
+    hw_sid_col = _detect_student_id_col(hw_rows)
+    hw_fio_col = _detect_fio_col(hw_rows)
+    if not hw_sid_col:
+        return {"rows": [], "total": 0}
+
+    # Дедупликация ДЗ — последняя сдача по каждому билету
+    latest: dict[str, SheetRow] = {}
+    for r in hw_rows:
+        sid = _normalize_student_id(r.data.get(hw_sid_col, ""))
+        if not sid:
+            continue
+        if sid not in latest or r.row_number > latest[sid].row_number:
+            latest[sid] = r
+
+    # Студбилеты с активной бронью
+    booked_sids: set[str] = set()
+    interview_rows = db.query(SheetRow).filter(SheetRow.sheet == "interview").all()
+    int_sid_col = _detect_student_id_col(interview_rows) if interview_rows else None
+    if int_sid_col:
+        booked_rn = {
+            ia.row_number
+            for ia in db.query(InterviewAssignment)
+            .filter(InterviewAssignment.slot_date.isnot(None))
+            .all()
+        }
+        for r in interview_rows:
+            if r.row_number in booked_rn:
+                sid = _normalize_student_id(r.data.get(int_sid_col, ""))
+                if sid:
+                    booked_sids.add(sid)
+
+    # Данные анкеты — ВК, факультет
+    anketa_rows = db.query(SheetRow).filter(SheetRow.sheet == "anketa").order_by(SheetRow.row_number).all()
+    ank_sid_col = _detect_student_id_col(anketa_rows) if anketa_rows else None
+    ank_fac_col = _detect_faculty_col(anketa_rows) if anketa_rows else None
+
+    def _find_col(rows, keywords):
+        if not rows:
+            return None
+        for col in rows[0].data:
+            if col.startswith("_"):
+                continue
+            if any(kw in col.lower() for kw in keywords):
+                return col
+        return None
+
+    ank_vk_col = _find_col(anketa_rows, ["вк", "vk"])
+    ank_fio_col = _detect_fio_col(anketa_rows) if anketa_rows else None
+
+    anketa_by_sid: dict[str, SheetRow] = {}
+    if ank_sid_col and anketa_rows:
+        for r in anketa_rows:
+            sid = _normalize_student_id(r.data.get(ank_sid_col, ""))
+            if sid:
+                anketa_by_sid[sid] = r
+
+    result = []
+    for sid, hw_row in latest.items():
+        if sid in booked_sids:
+            continue
+        fio = str(hw_row.data.get(hw_fio_col, "") or "").strip() if hw_fio_col else ""
+        ank = anketa_by_sid.get(sid)
+        vk = ""
+        faculty = ""
+        if ank:
+            if not fio and ank_fio_col:
+                fio = str(ank.data.get(ank_fio_col, "") or "").strip()
+            if ank_vk_col:
+                vk = str(ank.data.get(ank_vk_col, "") or "").strip()
+            if ank_fac_col:
+                faculty = str(ank.data.get(ank_fac_col, "") or "").strip()
+
+        result.append({
+            "sid": sid,
+            "fio": fio or "—",
+            "faculty": faculty,
+            "vk": vk,
+        })
+
+    result.sort(key=lambda r: (r["faculty"], r["fio"]))
+    return {"rows": result, "total": len(result)}
