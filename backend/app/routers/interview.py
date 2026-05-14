@@ -371,8 +371,8 @@ def set_assignment(
         db.add(a)
     db.commit()
 
-    # Уведомление в Telegram если оба проверяющих назначены
-    if payload.reviewer1_id and payload.reviewer2_id and a.slot_date:
+    # Уведомление в Telegram если назначен хотя бы один проверяющий
+    if (payload.reviewer1_id or payload.reviewer2_id) and a.slot_date:
         try:
             from app.routers.admin_ops import _build_id_to_faculty_map, _normalize_student_id
             from app.routers.telegram import notify_interview_assigned

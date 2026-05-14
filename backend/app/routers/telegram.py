@@ -173,12 +173,15 @@ async def notify_interview_assigned(
     except Exception:
         date_str = slot_date
 
-    reviewers = " + ".join(filter(None, [reviewer1, reviewer2]))
+    assigned = [r for r in [reviewer1, reviewer2] if r]
+    both = len(assigned) == 2
+    reviewers_str = " + ".join(assigned) if assigned else "—"
+    status = "✅" if both else "⚠️ частично"
     text = (
-        f"📋 <b>Собеседование назначено</b>\n"
+        f"📋 <b>Собеседование</b> {status}\n"
         f"👤 {fio}\n"
         f"📅 {date_str}, {slot_hour}:00\n"
-        f"✅ Проверяющие: {reviewers}"
+        f"{'Проверяющие' if both else 'Проверяющий'}: {reviewers_str}"
     )
 
     for chat in target_chats:
