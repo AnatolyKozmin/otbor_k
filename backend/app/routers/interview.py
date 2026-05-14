@@ -527,6 +527,7 @@ def get_interview_info(
     hw_package = None
     hw_submissions = 0
     telegram = None
+    vk = None
     faculty = None
 
     if norm_sid:
@@ -539,6 +540,7 @@ def get_interview_info(
             ank_sid = _detect_student_id_col(anketa_rows)
             ank_coord_col = _detect_col(anketa_rows, ["был", "координатор"])
             ank_tg_col = _detect_col(anketa_rows, ["telegram"]) or _detect_col(anketa_rows, ["тг"])
+            ank_vk_col = _detect_col(anketa_rows, ["вк"]) or _detect_col(anketa_rows, ["vk"])
             if ank_sid:
                 for ar in anketa_rows:
                     if _normalize_student_id(ar.data.get(ank_sid, "")) == norm_sid:
@@ -546,6 +548,8 @@ def get_interview_info(
                             prior_coord = str(ar.data.get(ank_coord_col, "") or "").strip() or None
                         if ank_tg_col:
                             telegram = str(ar.data.get(ank_tg_col, "") or "").strip() or None
+                        if ank_vk_col:
+                            vk = str(ar.data.get(ank_vk_col, "") or "").strip() or None
                         break
 
         # ДЗ — собираем все сдачи, берём последнюю (с максимальным row_number)
@@ -575,6 +579,7 @@ def get_interview_info(
         "reviewer1": {"id": a.reviewer1_id, "name": users_map.get(a.reviewer1_id)} if a and a.reviewer1_id else None,
         "reviewer2": {"id": a.reviewer2_id, "name": users_map.get(a.reviewer2_id)} if a and a.reviewer2_id else None,
         "faculty": faculty,
+        "vk": vk,
         "prior_coord": prior_coord,
         "hw_package": hw_package,
         "hw_link": hw_link,

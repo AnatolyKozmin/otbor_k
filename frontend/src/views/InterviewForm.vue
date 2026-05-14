@@ -8,6 +8,15 @@
         <div class="candidate-meta">
           <span v-if="info.faculty" class="meta-chip fac-chip">{{ info.faculty }}</span>
           <a
+            v-if="info.vk"
+            :href="vkLink(info.vk)"
+            target="_blank"
+            class="meta-chip vk-chip"
+          >
+            <span class="meta-label">VK:</span>
+            <b>{{ vkShort(info.vk) }}</b>
+          </a>
+          <a
             v-if="info.telegram"
             :href="tgLink(info.telegram)"
             target="_blank"
@@ -524,6 +533,18 @@ function tgLink(handle) {
   return `https://t.me/${clean}`
 }
 
+function vkLink(val) {
+  if (!val) return '#'
+  if (val.startsWith('http')) return val
+  const clean = val.replace(/^@/, '').replace(/^vk\.com\//, '')
+  return `https://vk.com/${clean}`
+}
+
+function vkShort(val) {
+  if (!val) return ''
+  return val.replace(/^https?:\/\/(www\.)?vk\.com\//, '').replace(/^@/, '')
+}
+
 const priorCoordClass = computed(() => {
   const v = (info.value?.prior_coord || '').toLowerCase()
   if (/^да\b/.test(v)) return 'yes'
@@ -879,6 +900,9 @@ onUnmounted(() => {
 .meta-chip.pkg { background: rgba(6,160,122,0.1); color: #058c6b; }
 .meta-chip.pkg b { color: #058c6b; }
 .meta-chip.fac-chip { background: rgba(67,97,238,0.1); color: #4361ee; font-weight: 700; }
+.meta-chip.vk-chip { background: rgba(39,90,155,0.1); color: #275a9b; text-decoration: none; }
+.meta-chip.vk-chip:hover { background: rgba(39,90,155,0.18); }
+.meta-chip.vk-chip b { color: #275a9b; }
 .meta-chip.tg-chip { background: rgba(0,136,204,0.1); color: #0088cc; text-decoration: none; }
 .meta-chip.tg-chip:hover { background: rgba(0,136,204,0.18); }
 .meta-chip.tg-chip b { color: #0088cc; }
