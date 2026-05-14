@@ -403,19 +403,21 @@ def set_assignment(
             r1_name = users_map.get(payload.reviewer1_id, "")
             r2_name = users_map.get(payload.reviewer2_id, "")
 
-            coro = notify_interview_assigned(
-                db=db, faculty=faculty, fio=fio,
-                slot_date=a.slot_date, slot_hour=a.slot_hour,
-                reviewer1=r1_name, reviewer2=r2_name,
-            )
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.create_task(coro)
-                else:
-                    loop.run_until_complete(coro)
-            except RuntimeError:
-                asyncio.run(coro)
+            import threading
+
+            def _notify():
+                import asyncio as _aio
+                loop = _aio.new_event_loop()
+                try:
+                    loop.run_until_complete(notify_interview_assigned(
+                        db=db, faculty=faculty, fio=fio,
+                        slot_date=a.slot_date, slot_hour=a.slot_hour,
+                        reviewer1=r1_name, reviewer2=r2_name,
+                    ))
+                finally:
+                    loop.close()
+
+            threading.Thread(target=_notify, daemon=True).start()
         except Exception as exc:
             print(f"[tg] Ошибка уведомления о назначении: {exc}")
 

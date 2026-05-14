@@ -181,17 +181,8 @@ async def notify_interview_assigned(
         f"✅ Проверяющие: {reviewers}"
     )
 
-    import asyncio
     for chat in target_chats:
-        try:
-            asyncio.create_task(_send_text(chat.chat_id, text))
-        except RuntimeError:
-            # Нет event loop (sync context) — запускаем в новом
-            loop = asyncio.new_event_loop()
-            try:
-                loop.run_until_complete(_send_text(chat.chat_id, text))
-            finally:
-                loop.close()
+        await _send_text(chat.chat_id, text)
 
 
 async def _send_photo(chat_id: str, photo_bytes: bytes) -> None:
