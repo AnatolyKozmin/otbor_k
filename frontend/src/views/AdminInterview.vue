@@ -16,8 +16,8 @@
           <button :class="['tab-btn', { active: viewMode === 'grid' }]" @click="viewMode = 'grid'">Сетка</button>
         </div>
         <label class="hide-past-toggle">
-          <input type="checkbox" v-model="hidePast" />
-          Скрыть прошедшие
+          <input type="checkbox" v-model="showPast" />
+          Показать прошедшие
         </label>
         <input v-model="search" class="search-input" placeholder="Поиск по ФИО…" />
         <button class="btn-unbooked" @click="openUnbooked">Не записались</button>
@@ -457,7 +457,7 @@ const search = ref('')
 const savingRow = ref(false)
 const viewMode = ref('table')
 const activeFaculty = ref('Все')
-const hidePast = ref(false)
+const showPast = ref(false)
 const unbookedModal = ref({ open: false, loading: false, rows: [], error: '' })
 
 const groupedUnbooked = computed(() => {
@@ -478,7 +478,7 @@ const faculties = computed(() => {
 
 const rowsByFaculty = computed(() => {
   let list = rows.value
-  if (hidePast.value) {
+  if (!showPast.value) {
     const now = new Date()
     list = list.filter(r => {
       if (!r.slot_date || r.slot_hour == null) return true
