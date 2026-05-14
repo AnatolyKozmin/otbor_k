@@ -351,88 +351,90 @@ async def start_bot_polling() -> None:
 
     @dp.message(F.text == "!список")
     async def cmd_spisok(message: Message) -> None:
-        """!список — список VK id незаписавшихся кандидатов, по одному на строку."""
-
+        """!список — ID из колонки C анкеты для незаписавшихся (сдали ДЗ, нет брони)."""
         from app.models import InterviewAssignment
-        from app.routers.admin_ops import (
-            _detect_student_id_col, _detect_fio_col, _normalize_student_id,
-        )
+        from app.routers.admin_ops import _detect_student_id_col, _normalize_student_id
 
         db = Session(engine)
         try:
+            # ── ДЗ: последняя сдача каждого студента ──
             hw_rows = db.query(SheetRow).filter(SheetRow.sheet == "homework").order_by(SheetRow.row_number).all()
             if not hw_rows:
                 await message.reply("Домашки не загружены.")
                 return
-
             hw_sid_col = _detect_student_id_col(hw_rows)
             if not hw_sid_col:
                 await message.reply("Не найдена колонка студ. билета в домашках.")
                 return
-
-            # Дедупликация ДЗ — последняя сдача
-            latest: dict[str, SheetRow] = {}
+            latest: dict[str, int] = {}
             for r in hw_rows:
                 sid = _normalize_student_id(r.data.get(hw_sid_col, ""))
-                if sid and (sid not in latest or r.row_number > latest[sid].row_number):
-                    latest[sid] = r
+                if sid and (sid not in latest or r.row_number > latest[sid]):
+                    latest[sid] = r.row_number
 
-            # Студбилеты уже записавшихся
+            # ── Кто уже записался ──
             booked_sids: set[str] = set()
-            interview_rows = db.query(SheetRow).filter(SheetRow.sheet == "interview").all()
-            int_sid_col = _detect_student_id_col(interview_rows) if interview_rows else None
+            int_rows = db.query(SheetRow).filter(SheetRow.sheet == "interview").all()
+            int_sid_col = _detect_student_id_col(int_rows) if int_rows else None
             if int_sid_col:
                 booked_rn = {
-                    ia.row_number
-                    for ia in db.query(InterviewAssignment)
+                    ia.row_number for ia in
+                    db.query(InterviewAssignment)
                     .filter(InterviewAssignment.slot_date.isnot(None)).all()
                 }
-                for r in interview_rows:
+                for r in int_rows:
                     if r.row_number in booked_rn:
                         sid = _normalize_student_id(r.data.get(int_sid_col, ""))
                         if sid:
                             booked_sids.add(sid)
 
-            # VK из анкет
-            anketa_rows = db.query(SheetRow).filter(SheetRow.sheet == "anketa").all()
-            ank_sid_col = _detect_student_id_col(anketa_rows) if anketa_rows else None
-            vk_col = None
-            if anketa_rows:
-                for col in anketa_rows[0].data:
-                    if col.startswith("_"): continue
-                    if any(kw in col.lower() for kw in ["вк", "vk"]):
-                        vk_col = col
-                        break
+            # ── Анкеты: колонка C (индекс 2 среди не-служебных колонок) ──
+            ank_rows = db.query(SheetRow).filter(SheetRow.sheet == "anketa").all()
+            if not ank_rows:
+                await message.reply("Анкеты не загружены.")
+                return
+            ank_sid_col = _detect_student_id_col(ank_rows)
+            # Колонка C = третья не-служебная колонка в порядке вставки
+            real_cols = [k for k in ank_rows[0].data.keys() if not k.startswith("_")]
+            col_c = real_cols[2] if len(real_cols) > 2 else None
+            if not col_c:
+                await message.reply("В анкетах нет колонки C.")
+                return
+
             anketa_by_sid: dict[str, SheetRow] = {}
             if ank_sid_col:
-                for r in anketa_rows:
+                for r in ank_rows:
                     sid = _normalize_student_id(r.data.get(ank_sid_col, ""))
                     if sid:
                         anketa_by_sid[sid] = r
 
-            vk_ids = []
-            for sid, _ in latest.items():
+            # ── Собираем ID из колонки C для незаписавшихся ──
+            ids = []
+            for sid in latest:
                 if sid in booked_sids:
                     continue
                 ank = anketa_by_sid.get(sid)
-                if ank and vk_col:
-                    vk = str(ank.data.get(vk_col, "") or "").strip()
-                    if vk:
-                        vk_ids.append(vk)
+                if ank:
+                    val = str(ank.data.get(col_c, "") or "").strip()
+                    if val:
+                        ids.append(val)
 
-            if not vk_ids:
-                await message.reply("Все сдавшие ДЗ уже записались на собес 🎉")
+            if not ids:
+                await message.reply("Все сдавшие ДЗ уже записались 🎉")
                 return
 
-            # Отправляем по частям (лимит Telegram ~4096 символов)
-            chunk = []
-            for vk in vk_ids:
-                chunk.append(vk)
+            # Отправляем кусками (лимит TG ~4096 символов)
+            header = f"Не записались ({len(ids)} чел.), колонка «{col_c}»:\n"
+            chunk: list[str] = []
+            first = True
+            for val in ids:
+                chunk.append(val)
                 if len("\n".join(chunk)) > 3800:
-                    await message.reply("\n".join(chunk))
+                    await message.reply((header if first else "") + "\n".join(chunk))
+                    first = False
                     chunk = []
             if chunk:
-                await message.reply(f"VK ({len(vk_ids)} чел.):\n" + "\n".join(chunk))
+                await message.reply((header if first else "") + "\n".join(chunk))
         finally:
             db.close()
 
