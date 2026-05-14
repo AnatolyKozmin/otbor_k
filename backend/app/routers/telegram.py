@@ -333,7 +333,7 @@ async def start_bot_polling() -> None:
       /chatid  — бот отвечает ID и названием текущего чата
       my_chat_member — когда бота добавляют в группу, сохраняет чат в БД
     """
-    from aiogram import Bot, Dispatcher
+    from aiogram import Bot, Dispatcher, F
     from aiogram.filters import Command
     from aiogram.types import ChatMemberUpdated, Message
 
@@ -348,6 +348,93 @@ async def start_bot_polling() -> None:
             f"Chat ID: <code>{chat.id}</code>\nНазвание: {name}",
             parse_mode="HTML",
         )
+
+    @dp.message(F.text == "!список")
+    async def cmd_spisok(message: Message) -> None:
+        """!список — список VK id незаписавшихся кандидатов, по одному на строку."""
+
+        from app.models import InterviewAssignment
+        from app.routers.admin_ops import (
+            _detect_student_id_col, _detect_fio_col, _normalize_student_id,
+        )
+
+        db = Session(engine)
+        try:
+            hw_rows = db.query(SheetRow).filter(SheetRow.sheet == "homework").order_by(SheetRow.row_number).all()
+            if not hw_rows:
+                await message.reply("Домашки не загружены.")
+                return
+
+            hw_sid_col = _detect_student_id_col(hw_rows)
+            if not hw_sid_col:
+                await message.reply("Не найдена колонка студ. билета в домашках.")
+                return
+
+            # Дедупликация ДЗ — последняя сдача
+            latest: dict[str, SheetRow] = {}
+            for r in hw_rows:
+                sid = _normalize_student_id(r.data.get(hw_sid_col, ""))
+                if sid and (sid not in latest or r.row_number > latest[sid].row_number):
+                    latest[sid] = r
+
+            # Студбилеты уже записавшихся
+            booked_sids: set[str] = set()
+            interview_rows = db.query(SheetRow).filter(SheetRow.sheet == "interview").all()
+            int_sid_col = _detect_student_id_col(interview_rows) if interview_rows else None
+            if int_sid_col:
+                booked_rn = {
+                    ia.row_number
+                    for ia in db.query(InterviewAssignment)
+                    .filter(InterviewAssignment.slot_date.isnot(None)).all()
+                }
+                for r in interview_rows:
+                    if r.row_number in booked_rn:
+                        sid = _normalize_student_id(r.data.get(int_sid_col, ""))
+                        if sid:
+                            booked_sids.add(sid)
+
+            # VK из анкет
+            anketa_rows = db.query(SheetRow).filter(SheetRow.sheet == "anketa").all()
+            ank_sid_col = _detect_student_id_col(anketa_rows) if anketa_rows else None
+            vk_col = None
+            if anketa_rows:
+                for col in anketa_rows[0].data:
+                    if col.startswith("_"): continue
+                    if any(kw in col.lower() for kw in ["вк", "vk"]):
+                        vk_col = col
+                        break
+            anketa_by_sid: dict[str, SheetRow] = {}
+            if ank_sid_col:
+                for r in anketa_rows:
+                    sid = _normalize_student_id(r.data.get(ank_sid_col, ""))
+                    if sid:
+                        anketa_by_sid[sid] = r
+
+            vk_ids = []
+            for sid, _ in latest.items():
+                if sid in booked_sids:
+                    continue
+                ank = anketa_by_sid.get(sid)
+                if ank and vk_col:
+                    vk = str(ank.data.get(vk_col, "") or "").strip()
+                    if vk:
+                        vk_ids.append(vk)
+
+            if not vk_ids:
+                await message.reply("Все сдавшие ДЗ уже записались на собес 🎉")
+                return
+
+            # Отправляем по частям (лимит Telegram ~4096 символов)
+            chunk = []
+            for vk in vk_ids:
+                chunk.append(vk)
+                if len("\n".join(chunk)) > 3800:
+                    await message.reply("\n".join(chunk))
+                    chunk = []
+            if chunk:
+                await message.reply(f"VK ({len(vk_ids)} чел.):\n" + "\n".join(chunk))
+        finally:
+            db.close()
 
     @dp.message(Command("кто"))
     async def cmd_kto(message: Message) -> None:
