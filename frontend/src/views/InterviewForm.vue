@@ -559,9 +559,11 @@ function onInput(fieldKey, value) {
 
 async function autosave(fieldKey, value) {
   try {
-    await api.post(`/interview/${rowNumber}/note`, { field_key: fieldKey, value })
-    syncStatus.value = 'saved'
-    setTimeout(() => { if (syncStatus.value === 'saved') syncStatus.value = '' }, 2000)
+    const { data } = await api.post(`/interview/${rowNumber}/note`, { field_key: fieldKey, value })
+    // Redis может быть недоступен — всё равно считаем "сохранено локально"
+    // финальное сохранение идёт напрямую из myNotes, не из Redis
+    syncStatus.value = data.ok ? 'saved' : 'local'
+    setTimeout(() => { if (syncStatus.value === 'saved' || syncStatus.value === 'local') syncStatus.value = '' }, 2000)
   } catch {
     syncStatus.value = 'error'
   }
@@ -581,8 +583,12 @@ async function saveAll() {
   saving.value = true
   savedMsg.value = ''
   try {
-    const { data } = await api.post(`/interview/${rowNumber}/save`)
-    savedMsg.value = `Сохранено ${data.saved_fields} полей`
+    const { data } = await api.post(`/interview/${rowNumber}/save`, { notes: { ...myNotes } })
+    if (data.saved_fields === 0) {
+      savedMsg.value = 'Нечего сохранять — заполните поля'
+    } else {
+      savedMsg.value = `Сохранено ${data.saved_fields} полей`
+    }
     setTimeout(() => { savedMsg.value = '' }, 3000)
   } catch {
     savedMsg.value = 'Ошибка сохранения'

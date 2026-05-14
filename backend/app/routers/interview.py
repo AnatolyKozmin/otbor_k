@@ -685,16 +685,30 @@ def save_note_live(
         return {"ok": False, "redis": False}
 
 
+class SavePayload(BaseModel):
+    notes: Dict[str, str] = {}
+
+
 @router.post("/{row_number}/save")
 def save_interview_final(
     row_number: int,
+    payload: SavePayload = SavePayload(),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Финальное сохранение всех Redis-заметок в БД."""
-    notes = _get_live_notes(row_number, user.id)
-    if not notes:
-        notes = _get_db_notes(row_number, user.id, db)
+    """Финальное сохранение заметок в БД.
+
+    Фронтенд передаёт текущее состояние notes напрямую — Redis используется
+    только для live-показа второму проверяющему, но не как источник истины
+    для финального сохранения.
+    """
+    if payload.notes:
+        notes = payload.notes
+    else:
+        # Fallback для старых клиентов или если notes не переданы
+        notes = _get_live_notes(row_number, user.id)
+        if not notes:
+            notes = _get_db_notes(row_number, user.id, db)
 
     review = (
         db.query(Review)
