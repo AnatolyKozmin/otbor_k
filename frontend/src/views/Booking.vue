@@ -42,8 +42,11 @@
               <b>назначаются обучающими координаторами</b>
             </div>
           </div>
-          <p class="hint">Хотите перенести запись? Выберите другой слот.</p>
-          <button class="ghost-btn rebook-btn" @click="goRebook">Перенести запись →</button>
+          <template v-if="candidate.already_booked.rebook_count === 0">
+            <p class="hint">Хотите перенести запись? Выберите другой слот. <b>Перенос доступен 1 раз.</b></p>
+            <button class="ghost-btn rebook-btn" @click="goRebook">Перенести запись →</button>
+          </template>
+          <p v-else class="hint muted-hint">Перенос уже был использован.</p>
 
           <div v-if="candidate.already_booked.cancel_count === 0" class="cancel-section">
             <p class="cancel-rules">

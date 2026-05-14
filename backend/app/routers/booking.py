@@ -123,6 +123,7 @@ def _already_booking_payload(db: Session, norm_sid: str) -> Optional[dict]:
         "reviewer2": r2.name if r2 else None,
         "reviewers_pending": not (r1 and r2),
         "cancel_count": existing.cancel_count or 0,
+        "rebook_count": existing.rebook_count or 0,
     }
 
 
@@ -336,11 +337,22 @@ def book(payload: BookPayload, db: Session = Depends(get_db)):
     if booked_count >= capacity:
         raise HTTPException(409, "Слот только что заняли, выберите другой")
 
-    # Создаём или обновляем бронь (перезапись разрешена — проверяющих сбрасываем)
+    # Создаём или обновляем бронь
     ia = db.query(InterviewAssignment).filter(
         InterviewAssignment.row_number == interview_row.row_number
     ).first()
-    if ia:
+    if ia and ia.slot_date is not None:
+        # Это перезапись — проверяем лимит (1 раз)
+        if (ia.rebook_count or 0) >= 1:
+            raise HTTPException(409, "Перезапись уже была использована. Повторная перезапись невозможна.")
+        ia.slot_date = payload.slot_date
+        ia.slot_hour = payload.slot_hour
+        ia.reviewer1_id = None
+        ia.reviewer2_id = None
+        ia.booked_at = utc_naive_now()
+        ia.rebook_count = (ia.rebook_count or 0) + 1
+    elif ia:
+        # Есть запись, но слот не выбран (после отмены) — просто обновляем
         ia.slot_date = payload.slot_date
         ia.slot_hour = payload.slot_hour
         ia.reviewer1_id = None
