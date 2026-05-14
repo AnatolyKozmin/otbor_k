@@ -50,6 +50,7 @@
               <div class="slot-card-fio">{{ row.fio || '—' }}</div>
               <span v-if="row.faculty" class="fac-badge">{{ row.faculty }}</span>
               <span class="slot-card-sid muted">{{ row.student_id || '' }}</span>
+              <button class="del-card-btn" @click="deleteRow(row)" title="Удалить запись">🗑</button>
             </div>
             <div class="slot-card-reviewers">
               <div class="rev-row">
@@ -96,6 +97,7 @@
             <th>Проверяющий 1</th>
             <th>Проверяющий 2</th>
             <th class="reco-col">Рекомендация</th>
+            <th class="del-col"></th>
           </tr>
         </thead>
         <tbody>
@@ -155,7 +157,6 @@
               </select>
             </td>
             <td class="reco-col">
-              <button class="del-btn" @click="deleteRow(row)" title="Удалить запись">✕</button>
               <div v-if="!row.slot_date" class="reco muted-empty">—</div>
               <template v-else-if="pickRecommendedPair(row)">
                 <div class="reco reco-clickable" :class="recoClass(row)" @click="openRecoModal(row)">
@@ -165,6 +166,9 @@
                 </div>
               </template>
               <div v-else class="reco reco-none">недостаточно свободных проверяющих</div>
+            </td>
+            <td class="del-col">
+              <button class="del-row-btn" @click="deleteRow(row)" title="Удалить запись">🗑</button>
             </td>
           </tr>
           <tr v-if="!filteredRows.length">
@@ -240,6 +244,7 @@
                 <div class="gp-cand-header">
                   <span class="gp-cand-fio">{{ row.fio || '—' }}</span>
                   <span v-if="row.faculty" class="fac-badge">{{ row.faculty }}</span>
+                  <button class="del-card-btn" @click="deleteRow(row)" title="Удалить запись" style="margin-left:auto;margin-right:0.25rem">🗑</button>
                   <span
                     class="gp-status-dot"
                     :class="row.reviewer1_id && row.reviewer2_id ? 'dot-green' : row.reviewer1_id || row.reviewer2_id ? 'dot-yellow' : 'dot-red'"
@@ -1072,6 +1077,23 @@ label {
   border-radius: 6px; transition: background 0.15s; flex-shrink: 0;
 }
 .close-btn:hover { background: #f0f2f5; color: #333; }
+
+.del-col { width: 40px; text-align: center; }
+.del-row-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 0.9rem; padding: 0.2rem 0.35rem;
+  border-radius: 6px; opacity: 0.35;
+  transition: opacity 0.15s, background 0.15s;
+}
+.del-row-btn:hover { opacity: 1; background: rgba(230,57,70,0.1); }
+
+.del-card-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 0.8rem; padding: 0.1rem 0.25rem;
+  border-radius: 5px; opacity: 0.3;
+  transition: opacity 0.15s, background 0.15s;
+}
+.del-card-btn:hover { opacity: 1; background: rgba(230,57,70,0.1); }
 
 .edit-sid-btn {
   background: none; border: none; cursor: pointer;
