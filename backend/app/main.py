@@ -123,6 +123,8 @@ def _migrate_db():
             conn.execute(text("ALTER TABLE interview_assignments ADD COLUMN slot_hour INTEGER"))
         if "booked_at" not in ia_cols:
             conn.execute(text("ALTER TABLE interview_assignments ADD COLUMN booked_at DATETIME"))
+        if "cancel_count" not in ia_cols:
+            conn.execute(text("ALTER TABLE interview_assignments ADD COLUMN cancel_count INTEGER NOT NULL DEFAULT 0"))
         conn.commit()
 
 

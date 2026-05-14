@@ -723,7 +723,7 @@ def save_interview_final(
     now = datetime.utcnow()
     if review:
         review.scores = notes
-        review.synced_to_sheets = False
+        review.synced_to_sheets = True  # собесы не синкаются через фоновый поток
         review.saved_at = now
     else:
         review = Review(
@@ -731,7 +731,7 @@ def save_interview_final(
             row_number=row_number,
             reviewer_id=user.id,
             scores=notes,
-            synced_to_sheets=False,
+            synced_to_sheets=True,  # собесы не синкаются через фоновый поток
             saved_at=now,
         )
         db.add(review)
