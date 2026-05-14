@@ -370,6 +370,55 @@ def set_assignment(
         )
         db.add(a)
     db.commit()
+
+    # Уведомление в Telegram если оба проверяющих назначены
+    if payload.reviewer1_id and payload.reviewer2_id and a.slot_date:
+        try:
+            from app.routers.admin_ops import _build_id_to_faculty_map, _normalize_student_id
+            from app.routers.telegram import notify_interview_assigned
+            import asyncio
+
+            row = db.query(SheetRow).filter(
+                SheetRow.sheet == "interview", SheetRow.row_number == row_number
+            ).first()
+            users_map = {u.id: u.name for u in db.query(User).all()}
+
+            fio = ""
+            faculty = ""
+            if row:
+                for col, val in row.data.items():
+                    if col.startswith("_"): continue
+                    if any(kw in col.lower() for kw in FIO_KEYWORDS):
+                        fio = str(val or "").strip()
+                        break
+                # факультет через студ. билет
+                for col, val in row.data.items():
+                    if col.startswith("_"): continue
+                    if "студ" in col.lower() and "билет" in col.lower():
+                        sid = _normalize_student_id(str(val or ""))
+                        if sid:
+                            faculty = _build_id_to_faculty_map(db).get(sid, "")
+                        break
+
+            r1_name = users_map.get(payload.reviewer1_id, "")
+            r2_name = users_map.get(payload.reviewer2_id, "")
+
+            coro = notify_interview_assigned(
+                db=db, faculty=faculty, fio=fio,
+                slot_date=a.slot_date, slot_hour=a.slot_hour,
+                reviewer1=r1_name, reviewer2=r2_name,
+            )
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(coro)
+                else:
+                    loop.run_until_complete(coro)
+            except RuntimeError:
+                asyncio.run(coro)
+        except Exception as exc:
+            print(f"[tg] Ошибка уведомления о назначении: {exc}")
+
     return {"ok": True}
 
 

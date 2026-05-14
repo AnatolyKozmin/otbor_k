@@ -136,6 +136,64 @@ def _detect_faculty(data: dict) -> str:
     return ""
 
 
+async def _send_text(chat_id: str, text: str) -> None:
+    from aiogram import Bot
+
+    bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
+    try:
+        await bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
+    except Exception as exc:
+        print(f"[tg] Ошибка отправки текста в {chat_id}: {exc}")
+    finally:
+        await bot.session.close()
+
+
+async def notify_interview_assigned(
+    db: "Session",
+    faculty: str,
+    fio: str,
+    slot_date: str,
+    slot_hour: int,
+    reviewer1: str,
+    reviewer2: str,
+) -> None:
+    """Отправляет короткое уведомление в чат факультета о назначении на собес."""
+    if not settings.TELEGRAM_BOT_TOKEN or not faculty:
+        return
+
+    chats = db.query(TelegramChat).all()
+    target_chats = [c for c in chats if faculty in (c.faculties or [])]
+    if not target_chats:
+        return
+
+    MONTHS = ["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"]
+    try:
+        y, m, d = slot_date.split("-")
+        date_str = f"{int(d)} {MONTHS[int(m)-1]}"
+    except Exception:
+        date_str = slot_date
+
+    reviewers = " + ".join(filter(None, [reviewer1, reviewer2]))
+    text = (
+        f"📋 <b>Собеседование назначено</b>\n"
+        f"👤 {fio}\n"
+        f"📅 {date_str}, {slot_hour}:00\n"
+        f"✅ Проверяющие: {reviewers}"
+    )
+
+    import asyncio
+    for chat in target_chats:
+        try:
+            asyncio.create_task(_send_text(chat.chat_id, text))
+        except RuntimeError:
+            # Нет event loop (sync context) — запускаем в новом
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(_send_text(chat.chat_id, text))
+            finally:
+                loop.close()
+
+
 async def _send_photo(chat_id: str, photo_bytes: bytes) -> None:
     from aiogram import Bot
     from aiogram.types import BufferedInputFile
