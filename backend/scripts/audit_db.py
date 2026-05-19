@@ -61,18 +61,40 @@ def main() -> None:
         print("БРОНИ НА СОБЕС")
         print("=" * 60)
 
+        now = datetime.now()
+
+        def _slot_end(a):
+            try:
+                return datetime.strptime(f"{a.slot_date} {a.slot_hour}:00", "%Y-%m-%d %H:%M")
+            except Exception:
+                return None
+
         booked = [a for a in ias if a.slot_date]
-        full = [a for a in booked if a.reviewer1_id and a.reviewer2_id]
-        partial = [a for a in booked if (a.reviewer1_id or a.reviewer2_id)
-                   and not (a.reviewer1_id and a.reviewer2_id)]
-        none_rev = [a for a in booked if not a.reviewer1_id and not a.reviewer2_id]
-        print(f"  Всего записано: {len(booked)}")
-        print(f"  Оба проверяющих: {len(full)}")
-        print(f"  Один проверяющий: {len(partial)}")
-        print(f"  Без проверяющих: {len(none_rev)}")
+        future = [a for a in booked if (_slot_end(a) or now) >= now]
+        past = [a for a in booked if (_slot_end(a) or now) < now]
+
+        def _rev_stats(group):
+            full = sum(1 for a in group if a.reviewer1_id and a.reviewer2_id)
+            partial = sum(1 for a in group if (a.reviewer1_id or a.reviewer2_id)
+                          and not (a.reviewer1_id and a.reviewer2_id))
+            none_r = sum(1 for a in group if not a.reviewer1_id and not a.reviewer2_id)
+            return full, partial, none_r
+
+        print(f"  Всего записано: {len(booked)}  "
+              f"(прошло: {len(past)}, предстоит: {len(future)})")
+        print()
+        f_full, f_part, f_none = _rev_stats(future)
+        print(f"  ПРЕДСТОЯЩИЕ ({len(future)}):")
+        print(f"    Оба проверяющих: {f_full}")
+        print(f"    Один проверяющий: {f_part}")
+        print(f"    Без проверяющих: {f_none}")
+        if f_part or f_none:
+            print(f"    → требуют внимания: {f_part + f_none}")
+        p_full, p_part, p_none = _rev_stats(past)
+        print(f"  Прошедшие ({len(past)}): оба={p_full}, один={p_part}, без={p_none}")
 
         by_date = Counter(a.slot_date for a in booked)
-        print("  По датам:")
+        print("  По датам (все):")
         for d in sorted(by_date):
             print(f"    {d}: {by_date[d]}")
 
@@ -119,23 +141,16 @@ def main() -> None:
         else:
             print(f"  {OK} Нет собесов где один проверяющий стоит дважды")
 
-        # 3.4 Брони в прошлом
-        now = datetime.now()
-        past = []
+        # 3.4 Битые slot_date/slot_hour
         for a in booked:
-            try:
-                end = datetime.strptime(f"{a.slot_date} {a.slot_hour}:00", "%Y-%m-%d %H:%M")
-                if end < now:
-                    past.append(a.row_number)
-            except Exception:
+            if _slot_end(a) is None:
                 issues.append(f"{ERR} Бронь #{a.row_number}: некорректные slot_date/slot_hour "
                                f"({a.slot_date!r}/{a.slot_hour!r})")
-        if past:
-            print(f"  {WARN} Прошедших собесов: {len(past)} (это норма, если они уже состоялись)")
+        print(f"  {OK} Прошедших собесов: {len(past)} (история, назначать там нечего)")
 
-        # 3.5 Один проверяющий на 2 собеса в один час
+        # 3.5 Один проверяющий на 2 собеса в один час — только БУДУЩИЕ
         slot_revs: dict[tuple, list] = defaultdict(list)
-        for a in booked:
+        for a in future:
             key = (a.slot_date, a.slot_hour)
             for rid in (a.reviewer1_id, a.reviewer2_id):
                 if rid:
