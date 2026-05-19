@@ -375,8 +375,7 @@ def set_assignment(
     if (payload.reviewer1_id or payload.reviewer2_id) and a.slot_date:
         try:
             from app.routers.admin_ops import _build_id_to_faculty_map, _normalize_student_id
-            from app.routers.telegram import notify_interview_assigned
-            import asyncio
+            from app.routers.telegram import build_assigned_notification, send_text_to_chats
 
             row = db.query(SheetRow).filter(
                 SheetRow.sheet == "interview", SheetRow.row_number == row_number
@@ -391,7 +390,6 @@ def set_assignment(
                     if any(kw in col.lower() for kw in FIO_KEYWORDS):
                         fio = str(val or "").strip()
                         break
-                # факультет через студ. билет
                 for col, val in row.data.items():
                     if col.startswith("_"): continue
                     if "студ" in col.lower() and "билет" in col.lower():
@@ -403,23 +401,27 @@ def set_assignment(
             r1_name = users_map.get(payload.reviewer1_id, "")
             r2_name = users_map.get(payload.reviewer2_id, "")
 
-            import threading
+            # Все запросы к БД — здесь, в контексте запроса. В поток уходят
+            # только готовые chat_id'ы и текст (никакой сессии).
+            chat_ids, text = build_assigned_notification(
+                db, faculty, fio, a.slot_date, a.slot_hour, r1_name, r2_name
+            )
+            if chat_ids:
+                import threading
 
-            def _notify():
-                import asyncio as _aio
-                loop = _aio.new_event_loop()
-                try:
-                    loop.run_until_complete(notify_interview_assigned(
-                        db=db, faculty=faculty, fio=fio,
-                        slot_date=a.slot_date, slot_hour=a.slot_hour,
-                        reviewer1=r1_name, reviewer2=r2_name,
-                    ))
-                finally:
-                    loop.close()
+                def _notify(_ids=chat_ids, _text=text):
+                    import asyncio as _aio
+                    loop = _aio.new_event_loop()
+                    try:
+                        loop.run_until_complete(send_text_to_chats(_ids, _text))
+                    except Exception as exc:
+                        print(f"[tg] Ошибка отправки уведомления: {exc}")
+                    finally:
+                        loop.close()
 
-            threading.Thread(target=_notify, daemon=True).start()
+                threading.Thread(target=_notify, daemon=True).start()
         except Exception as exc:
-            print(f"[tg] Ошибка уведомления о назначении: {exc}")
+            print(f"[tg] Ошибка подготовки уведомления: {exc}")
 
     return {"ok": True}
 

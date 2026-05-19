@@ -157,18 +157,39 @@ async def notify_interview_assigned(
     reviewer1: str,
     reviewer2: str,
 ) -> None:
-    """Отправляет короткое уведомление в чат факультета о назначении на собес."""
+    """DEPRECATED — оставлено для совместимости. Используйте
+    build_assigned_notification + send_text_to_chats."""
+    chat_ids, text = build_assigned_notification(
+        db, faculty, fio, slot_date, slot_hour, reviewer1, reviewer2
+    )
+    await send_text_to_chats(chat_ids, text)
+
+
+def build_assigned_notification(
+    db: "Session",
+    faculty: str,
+    fio: str,
+    slot_date: str,
+    slot_hour: int,
+    reviewer1: str,
+    reviewer2: str,
+) -> tuple[list[str], str]:
+    """Синхронно (в контексте запроса) собирает chat_id'ы факультета и текст.
+
+    Возвращает ([], "") если отправлять некуда — БД-запросы только здесь,
+    чтобы сессия не утекала в фоновый поток.
+    """
     if not settings.TELEGRAM_BOT_TOKEN or not faculty:
-        return
+        return [], ""
 
     chats = db.query(TelegramChat).all()
-    target_chats = [c for c in chats if faculty in (c.faculties or [])]
-    if not target_chats:
-        return
+    chat_ids = [c.chat_id for c in chats if faculty in (c.faculties or [])]
+    if not chat_ids:
+        return [], ""
 
     MONTHS = ["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"]
     try:
-        y, m, d = slot_date.split("-")
+        _, m, d = slot_date.split("-")
         date_str = f"{int(d)} {MONTHS[int(m)-1]}"
     except Exception:
         date_str = slot_date
@@ -183,9 +204,15 @@ async def notify_interview_assigned(
         f"📅 {date_str}, {slot_hour}:00\n"
         f"{'Проверяющие' if both else 'Проверяющий'}: {reviewers_str}"
     )
+    return chat_ids, text
 
-    for chat in target_chats:
-        await _send_text(chat.chat_id, text)
+
+async def send_text_to_chats(chat_ids: list[str], text: str) -> None:
+    """Асинхронно рассылает текст по chat_id'ам. Без БД — безопасно для потока."""
+    if not chat_ids or not text:
+        return
+    for cid in chat_ids:
+        await _send_text(cid, text)
 
 
 async def _send_photo(chat_id: str, photo_bytes: bytes) -> None:
