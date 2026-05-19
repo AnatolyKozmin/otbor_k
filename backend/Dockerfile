@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Копируем только код. credentials.json и SQLite-БД подаются через volumes,
 # чтобы не запекать чувствительные данные в образ.
 COPY app ./app
+COPY scripts ./scripts
 
 EXPOSE 8000
 
