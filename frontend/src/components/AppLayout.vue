@@ -10,6 +10,8 @@
         <router-link v-if="auth.isAdmin" to="/admin">Управление</router-link>
         <router-link v-if="auth.isAdmin" to="/admin/assignments">Распределение</router-link>
         <router-link v-if="auth.isAdmin" to="/admin/interview">Собесы (адм.)</router-link>
+        <router-link v-if="auth.isAdmin" to="/admin/interview-stats">Статистика собесов</router-link>
+        <router-link v-if="auth.isAdmin" to="/admin/applicant-reviews">Ответы кандидатов</router-link>
         <router-link v-if="auth.isAdmin" to="/admin/availability">Занятость (адм.)</router-link>
         <router-link v-if="auth.isAdmin" to="/admin/settings">Настройки</router-link>
       </nav>

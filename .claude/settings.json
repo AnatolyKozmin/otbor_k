@@ -37,7 +37,12 @@
       "Bash(curl -s http://127.0.0.1:8000/interview/form)",
       "Bash(curl -s -X POST http://127.0.0.1:8000/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin@koord.ru\",\"password\":\"admin123\"}')",
       "Bash(curl -s -w \"HTTP %{http_code}\\\\n\" http://localhost:5173/src/views/InterviewForm.vue -o /tmp/iv.txt)",
-      "Bash(.venv/bin/python -m scripts.build_sobes_layout --preview)"
+      "Bash(.venv/bin/python -m scripts.build_sobes_layout --preview)",
+      "Read(//Users/anotalij/CT/koord_hr/backend/app/**)",
+      "Bash(ssh root@82.22.38.111 'cd ~/otbor_k && docker compose exec backend python3 -c \" *)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('scripts/audit_db.py'\\).read\\(\\)\\); ast.parse\\(open\\('app/routers/telegram.py'\\).read\\(\\)\\); ast.parse\\(open\\('app/routers/interview.py'\\).read\\(\\)\\); print\\('Синтаксис OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('scripts/audit_db.py'\\).read\\(\\)\\); print\\('Синтаксис OK'\\)\")",
+      "Bash(.venv/bin/python -c \"from app.routers.interview import router; print\\('OK'\\)\")"
     ]
   }
 }

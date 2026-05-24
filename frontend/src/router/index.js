@@ -58,6 +58,16 @@ const routes = [
     meta: { requiresAuth: true, requiresAdmin: true },
   },
   {
+    path: '/admin/interview-stats',
+    component: () => import('../views/AdminInterviewStats.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  {
+    path: '/admin/applicant-reviews',
+    component: () => import('../views/AdminApplicantReviews.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+  },
+  {
     path: '/interviews',
     component: () => import('../views/InterviewList.vue'),
     meta: { requiresAuth: true },

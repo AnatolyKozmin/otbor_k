@@ -5,11 +5,13 @@ import json
 import math
 import random
 import time
+from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_admin
@@ -795,6 +797,136 @@ def save_interview_final(
         db.add(review)
     db.commit()
     return {"ok": True, "saved_fields": len(notes)}
+
+
+# =============================================================================
+# Admin stats
+# =============================================================================
+
+@router.get("/admin/reviewer-stats")
+def interview_reviewer_stats(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Сколько собесов назначено каждому проверяющему и сколько ответов сохранено."""
+    r1_counts = dict(
+        db.query(InterviewAssignment.reviewer1_id, func.count(InterviewAssignment.id))
+        .filter(InterviewAssignment.reviewer1_id.isnot(None))
+        .group_by(InterviewAssignment.reviewer1_id)
+        .all()
+    )
+    r2_counts = dict(
+        db.query(InterviewAssignment.reviewer2_id, func.count(InterviewAssignment.id))
+        .filter(InterviewAssignment.reviewer2_id.isnot(None))
+        .group_by(InterviewAssignment.reviewer2_id)
+        .all()
+    )
+    assigned_map: Dict[int, int] = defaultdict(int)
+    for rid, cnt in r1_counts.items():
+        assigned_map[rid] += cnt
+    for rid, cnt in r2_counts.items():
+        assigned_map[rid] += cnt
+
+    completed_map = dict(
+        db.query(Review.reviewer_id, func.count(Review.id))
+        .filter(Review.sheet == "interview")
+        .group_by(Review.reviewer_id)
+        .all()
+    )
+
+    all_users = db.query(User).order_by(User.name).all()
+    reviewer_ids = set(assigned_map) | set(completed_map)
+
+    result = []
+    seen: set = set()
+    for u in all_users:
+        if u.role == Role.coordinator or u.id in reviewer_ids:
+            seen.add(u.id)
+            result.append({
+                "id": u.id,
+                "name": u.name,
+                "assigned": assigned_map.get(u.id, 0),
+                "completed": completed_map.get(u.id, 0),
+            })
+    # Добавляем не-координаторов с ревью (например, админов)
+    users_by_id = {u.id: u for u in all_users}
+    for uid in reviewer_ids:
+        if uid not in seen and uid in users_by_id:
+            u = users_by_id[uid]
+            result.append({
+                "id": u.id,
+                "name": u.name,
+                "assigned": assigned_map.get(u.id, 0),
+                "completed": completed_map.get(u.id, 0),
+            })
+
+    result.sort(key=lambda r: (-r["assigned"], r["name"]))
+    return {"reviewers": result}
+
+
+@router.get("/admin/applicant-reviews")
+def interview_applicant_reviews(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Для каждого кандидата: кто проверял и какие ответы записаны."""
+    from app.routers.admin_ops import _build_id_to_faculty_map, _normalize_student_id
+
+    rows = (
+        db.query(SheetRow)
+        .filter(SheetRow.sheet == "interview")
+        .order_by(SheetRow.row_number)
+        .all()
+    )
+    if not rows:
+        return {"rows": [], "total": 0}
+
+    fio_col = _detect_col(rows, FIO_KEYWORDS)
+    sid_col = _detect_col(rows, STUDENT_ID_KEYWORDS)
+
+    assignments = {a.row_number: a for a in db.query(InterviewAssignment).all()}
+
+    reviews_by_pair: Dict[tuple, Review] = {
+        (rv.row_number, rv.reviewer_id): rv
+        for rv in db.query(Review).filter(Review.sheet == "interview").all()
+    }
+
+    users_map = {u.id: u.name for u in db.query(User).all()}
+    id_to_faculty = _build_id_to_faculty_map(db)
+
+    def _rev_data(rid: Optional[int], row_number: int) -> Optional[dict]:
+        if not rid:
+            return None
+        rv = reviews_by_pair.get((row_number, rid))
+        return {
+            "id": rid,
+            "name": users_map.get(rid, f"#{rid}"),
+            "scores": dict(rv.scores) if rv and rv.scores else None,
+            "saved_at": rv.saved_at.isoformat() if rv and rv.saved_at else None,
+        }
+
+    result = []
+    for row in rows:
+        a = assignments.get(row.row_number)
+        norm_sid = ""
+        if sid_col:
+            norm_sid = _normalize_student_id(str(row.data.get(sid_col, "") or ""))
+        result.append({
+            "row_number": row.row_number,
+            "fio": str(row.data.get(fio_col, "") or "").strip() if fio_col else "",
+            "faculty": id_to_faculty.get(norm_sid, "") if norm_sid else "",
+            "slot_date": a.slot_date if a else None,
+            "slot_hour": a.slot_hour if a else None,
+            "reviewer1": _rev_data(a.reviewer1_id if a else None, row.row_number),
+            "reviewer2": _rev_data(a.reviewer2_id if a else None, row.row_number),
+        })
+
+    result.sort(key=lambda r: (
+        r["slot_date"] is None,
+        r["slot_date"] or "",
+        r["slot_hour"] if r["slot_hour"] is not None else 0,
+    ))
+    return {"rows": result, "total": len(result)}
 
 
 # =============================================================================
