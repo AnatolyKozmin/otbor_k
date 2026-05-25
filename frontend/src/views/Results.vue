@@ -53,15 +53,21 @@
               <th>ФИО</th>
               <th>Факультет</th>
               <th class="th-score th-sortable" @click="setSort('anketa')">
-                Анкета <span class="sort-icon">{{ sortIndicator('anketa') }}</span>
+                Анкета
+                <span v-if="maxScores.anketa" class="th-max">/{{ maxScores.anketa }}</span>
+                <span class="sort-icon">{{ sortIndicator('anketa') }}</span>
               </th>
               <th class="th-score th-sortable" @click="setSort('homework')">
-                ДЗ <span class="sort-icon">{{ sortIndicator('homework') }}</span>
+                ДЗ
+                <span v-if="maxScores.homework" class="th-max">/{{ maxScores.homework }}</span>
+                <span class="sort-icon">{{ sortIndicator('homework') }}</span>
               </th>
               <th>Проверяющий 1</th>
               <th>Проверяющий 2</th>
               <th class="th-score th-total th-sortable" @click="setSort('total')">
-                Итого <span class="sort-icon">{{ sortIndicator('total') }}</span>
+                Итого
+                <span v-if="maxScores.total" class="th-max">/{{ maxScores.total }}</span>
+                <span class="sort-icon">{{ sortIndicator('total') }}</span>
               </th>
               <th v-if="auth.isAdmin" class="th-check">✓</th>
             </tr>
@@ -82,20 +88,23 @@
                   <span v-else class="muted">—</span>
                 </td>
                 <td class="td-score">
-                  <span v-if="c.anketa.score !== null" :class="scoreClass(c.anketa.score, 15)">
-                    {{ c.anketa.score }}
+                  <span v-if="c.anketa.score !== null" :class="scoreClass(c.anketa.score, maxScores.anketa)">
+                    {{ c.anketa.score }}<span class="score-max">/{{ maxScores.anketa }}</span>
                   </span>
                   <span v-else class="muted">—</span>
                 </td>
                 <td class="td-score">
-                  <span v-if="c.homework.score !== null" :class="scoreClass(c.homework.score, 18)">
-                    {{ c.homework.score }}
+                  <span v-if="c.homework.score !== null" :class="scoreClass(c.homework.score, maxScores.homework)">
+                    {{ c.homework.score }}<span class="score-max">/{{ maxScores.homework }}</span>
                   </span>
                   <span v-else class="muted">—</span>
                 </td>
                 <td>
                   <span v-if="c.interview.reviewer1" class="rev-cell">
                     <span class="rev-name">{{ c.interview.reviewer1.name }}</span>
+                    <span v-if="c.interview.reviewer1.score !== null" class="rev-score" :class="scoreClass(c.interview.reviewer1.score, maxScores.interview)">
+                      {{ c.interview.reviewer1.score }}<span class="score-max">/{{ maxScores.interview }}</span>
+                    </span>
                     <span class="saved-dot" :class="c.interview.reviewer1.saved ? 'dot-ok' : 'dot-no'" :title="c.interview.reviewer1.saved ? 'Заметки сохранены' : 'Заметки не сохранены'"></span>
                   </span>
                   <span v-else class="muted">—</span>
@@ -103,12 +112,17 @@
                 <td>
                   <span v-if="c.interview.reviewer2" class="rev-cell">
                     <span class="rev-name">{{ c.interview.reviewer2.name }}</span>
+                    <span v-if="c.interview.reviewer2.score !== null" class="rev-score" :class="scoreClass(c.interview.reviewer2.score, maxScores.interview)">
+                      {{ c.interview.reviewer2.score }}<span class="score-max">/{{ maxScores.interview }}</span>
+                    </span>
                     <span class="saved-dot" :class="c.interview.reviewer2.saved ? 'dot-ok' : 'dot-no'" :title="c.interview.reviewer2.saved ? 'Заметки сохранены' : 'Заметки не сохранены'"></span>
                   </span>
                   <span v-else class="muted">—</span>
                 </td>
                 <td class="td-score td-total">
-                  <b v-if="c.total_score !== null">{{ c.total_score }}</b>
+                  <b v-if="c.total_score !== null">
+                    {{ c.total_score }}<span class="score-max">/{{ maxScores.total }}</span>
+                  </b>
                   <span v-else class="muted">—</span>
                 </td>
                 <td v-if="auth.isAdmin" class="td-check" @click.stop>
@@ -157,6 +171,9 @@
                       <div v-if="c.interview.reviewer1" class="detail-block">
                         <div class="detail-block-title">
                           Собес — {{ c.interview.reviewer1.name }}
+                          <span v-if="c.interview.reviewer1.score !== null" class="score-hint">
+                            {{ c.interview.reviewer1.score }}/{{ maxScores.interview }} б.
+                          </span>
                           <span class="saved-tag" :class="c.interview.reviewer1.saved ? 'tag-ok' : 'tag-no'">
                             {{ c.interview.reviewer1.saved ? 'сохранено' : 'не сохранено' }}
                           </span>
@@ -174,6 +191,9 @@
                       <div v-if="c.interview.reviewer2" class="detail-block">
                         <div class="detail-block-title">
                           Собес — {{ c.interview.reviewer2.name }}
+                          <span v-if="c.interview.reviewer2.score !== null" class="score-hint">
+                            {{ c.interview.reviewer2.score }}/{{ maxScores.interview }} б.
+                          </span>
                           <span class="saved-tag" :class="c.interview.reviewer2.saved ? 'tag-ok' : 'tag-no'">
                             {{ c.interview.reviewer2.saved ? 'сохранено' : 'не сохранено' }}
                           </span>
@@ -214,6 +234,7 @@ const auth = useAuthStore()
 const loading = ref(true)
 const candidates = ref([])
 const faculties = ref([])
+const maxScores = ref({ anketa: null, homework: null, interview: null, total: null })
 const activeFaculty = ref('Все')
 const expanded = ref(null)
 const onlyIncomplete = ref(false)
@@ -314,6 +335,7 @@ onMounted(async () => {
     const { data } = await api.get('/results/')
     candidates.value = data.candidates
     faculties.value = data.faculties
+    if (data.max_scores) maxScores.value = data.max_scores
   } finally {
     loading.value = false
   }
@@ -467,8 +489,22 @@ td {
 .score-mid { color: #e07b00; font-weight: 600; }
 .score-lo  { color: #e63946; font-weight: 600; }
 
-.rev-cell { display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; }
+.score-max {
+  font-weight: 400;
+  opacity: 0.45;
+  font-size: 0.8em;
+  margin-left: 1px;
+}
+
+.th-max {
+  font-weight: 400;
+  opacity: 0.5;
+  font-size: 0.85em;
+}
+
+.rev-cell { display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; flex-wrap: wrap; }
 .rev-name { color: #333; }
+.rev-score { font-size: 0.8rem; font-weight: 600; }
 
 .saved-dot {
   width: 7px; height: 7px;

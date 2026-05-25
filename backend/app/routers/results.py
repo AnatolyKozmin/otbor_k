@@ -24,6 +24,12 @@ _HW_NUM: Set[str]     = {c["key"] for c in HOMEWORK_CRITERIA if "options" in c}
 _ANKETA_TEXT:   List[dict] = [c for c in ANKETA_CRITERIA   if "options" not in c]
 _HOMEWORK_TEXT: List[dict] = [c for c in HOMEWORK_CRITERIA if "options" not in c]
 
+# Максимально возможные баллы по каждому этапу
+_MAX_ANKETA    = sum(max(c["options"]) for c in ANKETA_CRITERIA   if "options" in c)
+_MAX_HOMEWORK  = sum(max(c["options"]) for c in HOMEWORK_CRITERIA if "options" in c)
+_MAX_INTERVIEW = _MAX_ANKETA  # интервью использует те же критерии
+_MAX_TOTAL     = _MAX_ANKETA + _MAX_HOMEWORK + _MAX_INTERVIEW * 2
+
 
 def _sum_numeric(scores: dict, keys: Set[str]) -> Optional[int]:
     total = 0
@@ -258,7 +264,16 @@ def get_results(
         })
 
     result.sort(key=lambda r: (r["faculty"] or "ЯЯЯ", r["fio"] or "ЯЯЯ"))
-    return {"candidates": result, "faculties": sorted(faculties_seen)}
+    return {
+        "candidates": result,
+        "faculties": sorted(faculties_seen),
+        "max_scores": {
+            "anketa":    _MAX_ANKETA,
+            "homework":  _MAX_HOMEWORK,
+            "interview": _MAX_INTERVIEW,
+            "total":     _MAX_TOTAL,
+        },
+    }
 
 
 @router.post("/{row_number}/select")
