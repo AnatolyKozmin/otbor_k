@@ -123,6 +123,15 @@ class InterviewAssignment(Base):
     )
 
 
+class FinalSelection(Base):
+    """Финальный выбор кандидата по итогам всех этапов."""
+    __tablename__ = "final_selections"
+
+    id = Column(Integer, primary_key=True)
+    row_number = Column(Integer, unique=True, nullable=False, index=True)
+    selected = Column(Boolean, default=False, nullable=False)
+
+
 class Review(Base):
     __tablename__ = "reviews"
 

@@ -319,6 +319,29 @@ def get_distribution(
 # Homework: incremental sync + auto-distribution
 # ---------------------------------------------------------------------------
 
+def _build_id_to_fio_map(db: Session) -> Dict[str, str]:
+    """Из загруженных анкет строим словарь нормализованный_студ_билет → ФИО."""
+    anketas = (
+        db.query(SheetRow)
+        .filter(SheetRow.sheet == "anketa")
+        .order_by(SheetRow.row_number)
+        .all()
+    )
+    if not anketas:
+        return {}
+    id_col = _detect_student_id_col(anketas)
+    fio_col = _detect_fio_col(anketas)
+    if not id_col or not fio_col:
+        return {}
+    mapping: Dict[str, str] = {}
+    for r in anketas:
+        sid = _normalize_student_id(r.data.get(id_col, ""))
+        fio = str(r.data.get(fio_col, "") or "").strip()
+        if sid and fio:
+            mapping[sid] = fio
+    return mapping
+
+
 def _build_id_to_faculty_map(db: Session) -> Dict[str, str]:
     """Из загруженных анкет строим словарь нормализованный_студ_билет → факультет."""
     anketas = (

@@ -870,7 +870,11 @@ def interview_applicant_reviews(
     _: User = Depends(require_admin),
 ):
     """Для каждого кандидата: кто проверял и какие ответы записаны."""
-    from app.routers.admin_ops import _build_id_to_faculty_map, _normalize_student_id
+    from app.routers.admin_ops import (
+        _build_id_to_faculty_map,
+        _build_id_to_fio_map,
+        _normalize_student_id,
+    )
 
     rows = (
         db.query(SheetRow)
@@ -893,6 +897,7 @@ def interview_applicant_reviews(
 
     users_map = {u.id: u.name for u in db.query(User).all()}
     id_to_faculty = _build_id_to_faculty_map(db)
+    id_to_fio = _build_id_to_fio_map(db)
 
     def _rev_data(rid: Optional[int], row_number: int) -> Optional[dict]:
         if not rid:
@@ -911,9 +916,14 @@ def interview_applicant_reviews(
         norm_sid = ""
         if sid_col:
             norm_sid = _normalize_student_id(str(row.data.get(sid_col, "") or ""))
+
+        # ФИО: берём из строки, fallback — из анкеты по студбилету
+        fio_raw = str(row.data.get(fio_col, "") or "").strip() if fio_col else ""
+        fio = fio_raw if (fio_raw and fio_raw != "—") else (id_to_fio.get(norm_sid, "") if norm_sid else "")
+
         result.append({
             "row_number": row.row_number,
-            "fio": str(row.data.get(fio_col, "") or "").strip() if fio_col else "",
+            "fio": fio,
             "faculty": id_to_faculty.get(norm_sid, "") if norm_sid else "",
             "slot_date": a.slot_date if a else None,
             "slot_hour": a.slot_hour if a else None,

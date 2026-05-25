@@ -7,6 +7,7 @@
         <router-link to="/applicants">Заявки</router-link>
         <router-link to="/availability">Занятость</router-link>
         <router-link to="/interviews">Собеседования</router-link>
+        <router-link to="/results">Финальные результаты</router-link>
         <router-link v-if="auth.isAdmin" to="/admin">Управление</router-link>
         <router-link v-if="auth.isAdmin" to="/admin/assignments">Распределение</router-link>
         <router-link v-if="auth.isAdmin" to="/admin/interview">Собесы (адм.)</router-link>
