@@ -24,10 +24,27 @@ _HW_NUM: Set[str]     = {c["key"] for c in HOMEWORK_CRITERIA if "options" in c}
 _ANKETA_TEXT:   List[dict] = [c for c in ANKETA_CRITERIA   if "options" not in c]
 _HOMEWORK_TEXT: List[dict] = [c for c in HOMEWORK_CRITERIA if "options" not in c]
 
+# Числовые ключи собеса (сохраняются формой интервью с префиксом comp_score_)
+_INTERVIEW_SCORE_KEYS: Set[str] = {
+    "comp_score_efcom",
+    "comp_score_timemgmt",
+    "comp_score_public",
+    "comp_score_project",
+    "comp_score_emoint",
+    "comp_score_initiative",
+    "comp_score_stress",
+    "comp_score_critical",
+    "comp_score_teamwork",
+    "comp_score_creative",
+    "comp_score_commun",
+    "comp_score_deviant",
+    "comp_score_interest",
+}
+
 # Максимально возможные баллы по каждому этапу
 _MAX_ANKETA    = sum(max(c["options"]) for c in ANKETA_CRITERIA   if "options" in c)
 _MAX_HOMEWORK  = sum(max(c["options"]) for c in HOMEWORK_CRITERIA if "options" in c)
-_MAX_INTERVIEW = _MAX_ANKETA  # интервью использует те же критерии, один проверяющий
+_MAX_INTERVIEW = len(_INTERVIEW_SCORE_KEYS) * 3  # 13 компетенций × 3 балла = 39
 _MAX_TOTAL     = _MAX_ANKETA + _MAX_HOMEWORK + _MAX_INTERVIEW
 
 
@@ -199,8 +216,8 @@ def get_results(
         r2_id = ia.reviewer2_id if ia else None
         r1_rv = reviews_map.get(("interview", row.row_number, r1_id)) if r1_id else None
         r2_rv = reviews_map.get(("interview", row.row_number, r2_id)) if r2_id else None
-        r1_score = _sum_numeric(r1_rv.scores, _ANKETA_NUM) if r1_rv else None
-        r2_score = _sum_numeric(r2_rv.scores, _ANKETA_NUM) if r2_rv else None
+        r1_score = _sum_numeric(r1_rv.scores, _INTERVIEW_SCORE_KEYS) if r1_rv else None
+        r2_score = _sum_numeric(r2_rv.scores, _INTERVIEW_SCORE_KEYS) if r2_rv else None
 
         # Incomplete flag
         has_slot = ia is not None and ia.slot_date is not None
