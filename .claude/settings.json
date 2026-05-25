@@ -52,7 +52,10 @@
       "Bash(curl -s http://localhost:8001/openapi.json)",
       "Bash(curl -s -X POST http://localhost:8001/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"admin@koord.ru\",\"password\":\"admin123\"}')",
       "Bash(.venv/bin/python3 -)",
-      "Bash(curl -s -X POST http://localhost:8001/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"ekaterina.basova@koord.ru\",\"password\":\"Koord2026\"}')"
+      "Bash(curl -s -X POST http://localhost:8001/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"ekaterina.basova@koord.ru\",\"password\":\"Koord2026\"}')",
+      "Bash(python -c \"from app.routers.results import router; print\\('import OK'\\)\")",
+      "Bash(docker compose exec backend python -c ' *)",
+      "Bash(python -c ' *)"
     ]
   }
 }

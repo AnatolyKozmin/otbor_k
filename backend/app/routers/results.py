@@ -139,35 +139,34 @@ def get_results(
         for s in db.query(FinalSelection).all()
     }
 
-    # FIO + SID column detection in interview rows
-    fio_col = None
-    sid_col = None
-    for col in interview_rows[0].data.keys():
-        if col.startswith("_"):
-            continue
-        cl = col.lower()
-        if fio_col is None and ("фио" in cl or "имя" in cl or "фамилия" in cl):
-            fio_col = col
-        if sid_col is None and ("студ" in cl and "билет" in cl):
-            sid_col = col
-    if sid_col is None:
-        for col in interview_rows[0].data.keys():
+    def _row_sid(data: dict) -> str:
+        """Extract normalized student ID from a single row's data dict."""
+        for col, val in data.items():
             if col.startswith("_"):
                 continue
-            if "билет" in col.lower():
-                sid_col = col
-                break
+            cl = col.lower()
+            if ("студ" in cl and "билет" in cl) or "билет" in cl:
+                return _normalize_student_id(str(val or ""))
+        return ""
+
+    def _row_fio(data: dict) -> str:
+        """Extract FIO string from a single row's data dict."""
+        for col, val in data.items():
+            if col.startswith("_"):
+                continue
+            cl = col.lower()
+            if "фио" in cl or "имя" in cl or "фамилия" in cl:
+                return str(val or "").strip()
+        return ""
 
     # ---- Строим результат -----------------------------------------------
     result = []
     faculties_seen: set = set()
 
     for row in interview_rows:
-        norm_sid = ""
-        if sid_col:
-            norm_sid = _normalize_student_id(str(row.data.get(sid_col, "") or ""))
+        norm_sid = _row_sid(row.data)
 
-        fio_raw = str(row.data.get(fio_col, "") or "").strip() if fio_col else ""
+        fio_raw = _row_fio(row.data)
         fio = fio_raw if (fio_raw and fio_raw != "—") else (id_to_fio.get(norm_sid, "") if norm_sid else "")
         faculty = id_to_faculty.get(norm_sid, "") if norm_sid else ""
         if faculty:
