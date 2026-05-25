@@ -27,8 +27,8 @@ _HOMEWORK_TEXT: List[dict] = [c for c in HOMEWORK_CRITERIA if "options" not in c
 # Максимально возможные баллы по каждому этапу
 _MAX_ANKETA    = sum(max(c["options"]) for c in ANKETA_CRITERIA   if "options" in c)
 _MAX_HOMEWORK  = sum(max(c["options"]) for c in HOMEWORK_CRITERIA if "options" in c)
-_MAX_INTERVIEW = _MAX_ANKETA  # интервью использует те же критерии
-_MAX_TOTAL     = _MAX_ANKETA + _MAX_HOMEWORK + _MAX_INTERVIEW * 2
+_MAX_INTERVIEW = _MAX_ANKETA  # интервью использует те же критерии, один проверяющий
+_MAX_TOTAL     = _MAX_ANKETA + _MAX_HOMEWORK + _MAX_INTERVIEW
 
 
 def _sum_numeric(scores: dict, keys: Set[str]) -> Optional[int]:
@@ -218,6 +218,10 @@ def get_results(
         else:
             incomplete = "none"  # не записан
 
+        # Interview combined score
+        int_parts = [x for x in [r1_score, r2_score] if x is not None]
+        int_score = sum(int_parts) if int_parts else None
+
         # Total score (сумма числовых из всех этапов)
         numeric_parts = [x for x in [ank_score, hw_score, r1_score, r2_score] if x is not None]
         total = sum(numeric_parts) if numeric_parts else None
@@ -243,6 +247,7 @@ def get_results(
                 "saved": hw_rv is not None,
             },
             "interview": {
+                "score": int_score,
                 "reviewer1": {
                     "id": r1_id,
                     "name": users_map.get(r1_id) if r1_id else None,

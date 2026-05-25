@@ -62,6 +62,11 @@
                 <span v-if="maxScores.homework" class="th-max">/{{ maxScores.homework }}</span>
                 <span class="sort-icon">{{ sortIndicator('homework') }}</span>
               </th>
+              <th class="th-score th-sortable" @click="setSort('interview')">
+                Собес
+                <span v-if="maxScores.interview" class="th-max">/{{ maxScores.interview }}</span>
+                <span class="sort-icon">{{ sortIndicator('interview') }}</span>
+              </th>
               <th>Проверяющий 1</th>
               <th>Проверяющий 2</th>
               <th class="th-score th-total th-sortable" @click="setSort('total')">
@@ -96,6 +101,12 @@
                 <td class="td-score">
                   <span v-if="c.homework.score !== null" :class="scoreClass(c.homework.score, maxScores.homework)">
                     {{ c.homework.score }}<span class="score-max">/{{ maxScores.homework }}</span>
+                  </span>
+                  <span v-else class="muted">—</span>
+                </td>
+                <td class="td-score">
+                  <span v-if="c.interview.score !== null" :class="scoreClass(c.interview.score, maxScores.interview)">
+                    {{ c.interview.score }}<span class="score-max">/{{ maxScores.interview }}</span>
                   </span>
                   <span v-else class="muted">—</span>
                 </td>
@@ -137,7 +148,7 @@
 
               <!-- Expanded detail -->
               <tr v-if="expanded === c.row_number" class="detail-row">
-                <td :colspan="auth.isAdmin ? 9 : 8">
+                <td :colspan="auth.isAdmin ? 10 : 9">
                   <div class="detail-panel">
                     <div class="detail-grid">
 
@@ -259,6 +270,7 @@ function sortIndicator(field) {
 function scoreOf(c, field) {
   if (field === 'anketa') return c.anketa.score
   if (field === 'homework') return c.homework.score
+  if (field === 'interview') return c.interview.score
   if (field === 'total') return c.total_score
   return null
 }
