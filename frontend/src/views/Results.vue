@@ -52,11 +52,17 @@
               <th class="th-arrow"></th>
               <th>ФИО</th>
               <th>Факультет</th>
-              <th class="th-score">Анкета</th>
-              <th class="th-score">ДЗ</th>
+              <th class="th-score th-sortable" @click="setSort('anketa')">
+                Анкета <span class="sort-icon">{{ sortIndicator('anketa') }}</span>
+              </th>
+              <th class="th-score th-sortable" @click="setSort('homework')">
+                ДЗ <span class="sort-icon">{{ sortIndicator('homework') }}</span>
+              </th>
               <th>Проверяющий 1</th>
               <th>Проверяющий 2</th>
-              <th class="th-score th-total">Итого</th>
+              <th class="th-score th-total th-sortable" @click="setSort('total')">
+                Итого <span class="sort-icon">{{ sortIndicator('total') }}</span>
+              </th>
               <th v-if="auth.isAdmin" class="th-check">✓</th>
             </tr>
           </thead>
@@ -212,6 +218,29 @@ const activeFaculty = ref('Все')
 const expanded = ref(null)
 const onlyIncomplete = ref(false)
 const onlySelected = ref(false)
+const sortBy = ref(null)   // 'anketa' | 'homework' | 'total' | null
+const sortDir = ref('desc') // 'asc' | 'desc'
+
+function setSort(field) {
+  if (sortBy.value === field) {
+    sortDir.value = sortDir.value === 'desc' ? 'asc' : 'desc'
+  } else {
+    sortBy.value = field
+    sortDir.value = 'desc'
+  }
+}
+
+function sortIndicator(field) {
+  if (sortBy.value !== field) return '⇅'
+  return sortDir.value === 'desc' ? '▼' : '▲'
+}
+
+function scoreOf(c, field) {
+  if (field === 'anketa') return c.anketa.score
+  if (field === 'homework') return c.homework.score
+  if (field === 'total') return c.total_score
+  return null
+}
 
 const filtered = computed(() => {
   let list = candidates.value
@@ -225,8 +254,21 @@ const filtered = computed(() => {
 })
 
 const pageFaculty = computed(() => {
-  if (activeFaculty.value === 'Все') return filtered.value
-  return filtered.value.filter(c => c.faculty === activeFaculty.value)
+  let list = activeFaculty.value === 'Все'
+    ? filtered.value
+    : filtered.value.filter(c => c.faculty === activeFaculty.value)
+
+  if (!sortBy.value) return list
+
+  const dir = sortDir.value === 'desc' ? -1 : 1
+  return [...list].sort((a, b) => {
+    const av = scoreOf(a, sortBy.value)
+    const bv = scoreOf(b, sortBy.value)
+    if (av === null && bv === null) return 0
+    if (av === null) return 1   // null всегда в конце
+    if (bv === null) return -1
+    return (av - bv) * dir
+  })
 })
 
 const incompleteCount = computed(() =>
@@ -376,6 +418,10 @@ th {
 .th-score { text-align: center; width: 60px; }
 .th-total { color: #1a1a2e; font-size: 0.8rem; }
 .th-check { text-align: center; width: 36px; }
+.th-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.th-sortable:hover { color: #4361ee; }
+.sort-icon { font-size: 0.65rem; opacity: 0.5; margin-left: 2px; }
+.th-sortable:hover .sort-icon { opacity: 1; }
 
 td {
   padding: 0.55rem 0.75rem;
