@@ -95,6 +95,25 @@
       </template>
     </div>
 
+    <!-- Selected candidates by faculty -->
+    <div class="card" v-if="selSummary">
+      <div class="sel-header">
+        <h3>Отобранные кандидаты</h3>
+        <span class="sel-total-badge">Итого: {{ selSummary.total }}</span>
+      </div>
+      <div v-if="!selSummary.total" class="muted-msg">Пока никто не отмечен.</div>
+      <div v-else class="sel-grid">
+        <div
+          v-for="(count, faculty) in sortedFaculties"
+          :key="faculty"
+          class="sel-fac-cell"
+        >
+          <span class="sel-fac-name">{{ faculty }}</span>
+          <span class="sel-fac-count">{{ count }}</span>
+        </div>
+      </div>
+    </div>
+
     <div v-if="auth.user.role === 'coordinator'" class="card">
       <div class="faculties-header">
         <div>
@@ -128,7 +147,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import AppLayout from '../components/AppLayout.vue'
 import { useAuthStore } from '../stores/auth'
 import api from '../api'
@@ -142,6 +161,16 @@ const SHEETS = [
 ]
 
 const auth = useAuthStore()
+
+// Selected summary (all users)
+const selSummary = ref(null)
+
+const sortedFaculties = computed(() => {
+  if (!selSummary.value?.by_faculty) return {}
+  return Object.fromEntries(
+    Object.entries(selSummary.value.by_faculty).sort((a, b) => b[1] - a[1])
+  )
+})
 
 // Admin overview
 const overview = ref(null)
@@ -166,6 +195,9 @@ async function loadOverview() {
 }
 
 onMounted(async () => {
+  const { data } = await api.get('/results/selected-summary')
+  selSummary.value = data
+
   if (!auth.isAdmin) return
   await loadOverview()
 })
@@ -472,6 +504,53 @@ h2 { margin: 0 0 1.5rem; color: #1a1a2e; font-size: 1.4rem; }
 }
 
 .no-faculties { color: #bbb; font-size: 0.875rem; font-style: italic; }
+
+/* Selected summary */
+.sel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.sel-header h3 { margin: 0; color: #1a1a2e; font-size: 1rem; }
+
+.sel-total-badge {
+  background: rgba(67,97,238,0.1);
+  color: #4361ee;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.25rem 0.7rem;
+  border-radius: 20px;
+}
+
+.sel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 0.6rem;
+}
+
+.sel-fac-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(67,97,238,0.04);
+  border: 1.5px solid rgba(67,97,238,0.12);
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+}
+
+.sel-fac-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.sel-fac-count {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #4361ee;
+  line-height: 1;
+}
 
 .faculty-grid {
   display: grid;

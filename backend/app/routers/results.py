@@ -276,3 +276,53 @@ def toggle_selection(
         db.add(sel)
     db.commit()
     return {"ok": True, "selected": sel.selected}
+
+
+@router.get("/selected-summary")
+def selected_summary(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Количество отобранных кандидатов по факультетам."""
+    from app.routers.admin_ops import (
+        _build_id_to_faculty_map,
+        _detect_student_id_col,
+        _normalize_student_id,
+    )
+
+    selected_rns = {
+        s.row_number
+        for s in db.query(FinalSelection).filter(FinalSelection.selected == True).all()  # noqa: E712
+    }
+    if not selected_rns:
+        return {"by_faculty": {}, "total": 0}
+
+    interview_rows = (
+        db.query(SheetRow)
+        .filter(SheetRow.sheet == "interview", SheetRow.row_number.in_(selected_rns))
+        .all()
+    )
+
+    id_to_faculty = _build_id_to_faculty_map(db)
+
+    by_faculty: Dict[str, int] = {}
+    no_faculty = 0
+    for row in interview_rows:
+        norm_sid = ""
+        for col, val in row.data.items():
+            if col.startswith("_"):
+                continue
+            cl = col.lower()
+            if ("студ" in cl and "билет" in cl) or "билет" in cl:
+                norm_sid = _normalize_student_id(str(val or ""))
+                break
+        faculty = id_to_faculty.get(norm_sid, "") if norm_sid else ""
+        if faculty:
+            by_faculty[faculty] = by_faculty.get(faculty, 0) + 1
+        else:
+            no_faculty += 1
+
+    if no_faculty:
+        by_faculty["Без факультета"] = no_faculty
+
+    return {"by_faculty": by_faculty, "total": len(interview_rows)}
